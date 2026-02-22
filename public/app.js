@@ -201,7 +201,8 @@ function createLayout(user) {
 
     // 人気タグを非同期で取得
     loadPopularTags();
-    loadTrendingWords();
+    loadTrendingWordbooks();
+
 
     renderGuestConsentPopup(container);
 
@@ -277,7 +278,8 @@ function createLayout(user) {
 
   // 人気タグを非同期で取得
   loadPopularTags();
-  loadTrendingWords();
+  loadTrendingWordbooks();
+
 
   return container;
 }
@@ -320,22 +322,22 @@ async function loadPopularTags() {
   }
 }
 
-async function loadTrendingWords() {
+async function loadTrendingWordbooks() {
   try {
-    const words = await fetchAPI('/trending/words');
+    const wordbooks = await fetchAPI('/trending/wordbooks');
     const container = document.getElementById('trendingWordsList');
     if (!container) return;
 
-    if (words.length === 0) {
+    if (wordbooks.length === 0) {
       container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">まだありません</span>';
       return;
     }
 
-    container.innerHTML = words.map(w =>
-      `<div class="trending-word" onclick="window.location.hash='#/wordbook/${w.wordbook_id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
-        <div style="font-weight: 600; font-size: 14px;">${w.word}</div>
-        <div style="color: var(--text-secondary); font-size: 12px;">${w.meaning}</div>
-        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${w.study_count}回 · ${w.username}</div>
+    container.innerHTML = wordbooks.map(wb =>
+      `<div class="trending-word" onclick="window.location.hash='#/wordbook/${wb.id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
+        <div style="font-weight: 600; font-size: 14px;">${wb.title}</div>
+        <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${wb.description || '説明はありません'}</div>
+        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · @${wb.username}</div>
       </div>`
     ).join('');
   } catch (e) {
@@ -343,6 +345,7 @@ async function loadTrendingWords() {
     if (container) container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">読み込みエラー</span>';
   }
 }
+
 
 window.logout = () => {
   localStorage.removeItem('token');

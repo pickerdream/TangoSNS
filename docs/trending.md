@@ -4,40 +4,37 @@ TangoSNSでは、人気コンテンツを発見するための急上昇機能を
 
 ## 急上昇機能の概要
 
-- 学習回数が多い単語帳の単語を表示
+- 学習回数が多い単語帳を表示
 - 右サイドバーの検索バー下に固定表示
 - 人気コンテンツの発見を促進
 
 ## バックエンド実装 (`src/routes/trending.js`)
 
 ### APIエンドポイント
-- **急上昇単語取得 (`GET /api/trending/words`)**:
-  - 単語帳の学習回数が多い順に単語を5件取得
-  - 学習回数 = `study_history`テーブルのカウント
+- **急上昇単語帳取得 (`GET /api/trending/wordbooks`)**:
+  - 学習回数（`study_history`の件数）と閲覧数（`view_count`）が多い順に単語帳を5件取得
 
 ### クエリロジック
 ```sql
-SELECT w.id, w.word, w.meaning, w.view_count,
-       wb.title AS wordbook_title, wb.id AS wordbook_id,
-       u.username,
+SELECT wb.id, wb.title, wb.description, wb.view_count, wb.created_at,
+       u.username, u.avatar_url,
        COALESCE((SELECT COUNT(*) FROM study_history sh
                 WHERE sh.wordbook_id = wb.id), 0) AS study_count
-FROM words w
-JOIN wordbooks wb ON w.wordbook_id = wb.id
+FROM wordbooks wb
 JOIN users u ON wb.user_id = u.id
-ORDER BY study_count DESC, w.view_count DESC
+ORDER BY study_count DESC, wb.view_count DESC
 LIMIT 5
 ```
 
 ## フロントエンド実装 (`public/app.js`)
 
-### 急上昇表示 (`loadTrendingWords`)
+### 急上昇表示 (`loadTrendingWordbooks`)
 - ページロード時にAPIを呼び出し
-- 右サイドバーに単語リストを表示
-- クリックで該当単語帳に遷移
+- 右サイドバーに単語帳リストを表示
+- クリックで該当単語帳の個別ページに遷移
 
 ### UIデザイン
-- 単語 + 意味 + 学習回数 + ユーザー名
+- 単語帳のタイトル + 短い説明 + 学習/閲覧回数 + 作成者名
 - コンパクトなカード形式
 - スクロール可能なリスト
 
