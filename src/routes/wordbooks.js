@@ -138,17 +138,88 @@ router.get('/:id', async (req, res) => {
             } catch (e) { }
         }
 
-        const wbResult = await db.query(
-            `UPDATE wordbooks SET view_count = view_count + 1 WHERE id = $1
-             RETURNING id, title, description, created_at, view_count`,
-            [id]
-        );
+        // IPアドレスとポートを取得
+        const clientIp = req.ip || req.connection.remoteAddress || '0.0.0.0';
+        const clientPort = req.connection.remotePort || 0;
+
+        // ビュー数をカウント（同一ユーザーまたは同一IP:ポートの場合、1時間以上経過している場合のみ）
+        let shouldCountView = true;
+        if (currentUserId) {
+            // ログインユーザーの最後のビュー時刻をチェック
+            const lastViewResult = await db.query(
+                `SELECT viewed_at FROM wordbook_views 
+                 WHERE user_id = $1 AND wordbook_id = $2`,
+                [currentUserId, id]
+            );
+
+            if (lastViewResult.rows[0]) {
+                const lastViewTime = new Date(lastViewResult.rows[0].viewed_at);
+                const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                
+                if (lastViewTime > oneHourAgo) {
+                    // 1時間以内なのでカウントしない
+                    shouldCountView = false;
+                }
+            }
+        } else {
+            // ゲストユーザーの場合、IP:ポートの組み合わせでチェック
+            const lastGuestViewResult = await db.query(
+                `SELECT viewed_at FROM guest_wordbook_views 
+                 WHERE ip_address = $1 AND port = $2 AND wordbook_id = $3`,
+                [clientIp, clientPort, id]
+            );
+
+            if (lastGuestViewResult.rows[0]) {
+                const lastViewTime = new Date(lastGuestViewResult.rows[0].viewed_at);
+                const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                
+                if (lastViewTime > oneHourAgo) {
+                    // 1時間以内なのでカウントしない
+                    shouldCountView = false;
+                }
+            }
+        }
+
+        // ビュー数をアップデート
+        let wbResult;
+        if (shouldCountView) {
+            wbResult = await db.query(
+                `UPDATE wordbooks SET view_count = view_count + 1 WHERE id = $1
+                 RETURNING id, title, description, created_at, view_count`,
+                [id]
+            );
+        } else {
+            wbResult = await db.query(
+                `SELECT id, title, description, created_at, view_count FROM wordbooks WHERE id = $1`,
+                [id]
+            );
+        }
 
         if (!wbResult.rows[0]) {
             return res.status(404).json({ error: '単語帳が見つかりません' });
         }
 
         const wordbook = wbResult.rows[0];
+
+        // ビュー履歴を更新
+        if (currentUserId) {
+            await db.query(
+                `INSERT INTO wordbook_views (user_id, wordbook_id, viewed_at) 
+                 VALUES ($1, $2, current_timestamp)
+                 ON CONFLICT (user_id, wordbook_id) DO UPDATE 
+                 SET viewed_at = current_timestamp`,
+                [currentUserId, id]
+            );
+        } else {
+            // ゲストユーザーのビュー履歴を更新
+            await db.query(
+                `INSERT INTO guest_wordbook_views (ip_address, port, wordbook_id, viewed_at) 
+                 VALUES ($1, $2, $3, current_timestamp)
+                 ON CONFLICT (ip_address, port, wordbook_id) DO UPDATE 
+                 SET viewed_at = current_timestamp`,
+                [clientIp, clientPort, id]
+            );
+        }
 
         // ユーザー情報、単語数、コメント数、学習回数を取得
         const detailsResult = await db.query(
@@ -251,6 +322,106 @@ router.delete('/:id', authenticate, async (req, res) => {
 
         await db.query('DELETE FROM wordbooks WHERE id = $1', [id]);
         res.json({ message: '単語帳を削除しました' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * POST /api/wordbooks/:id/like
+ * 単語帳にいいねを追加
+ */
+router.post('/:id/like', authenticate, async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 単語帳の存在確認
+        const wb = await db.query('SELECT id FROM wordbooks WHERE id = $1', [id]);
+        if (!wb.rows[0]) return res.status(404).json({ error: '単語帳が見つかりません' });
+
+        // いいねを追加
+        try {
+            await db.query(
+                'INSERT INTO wordbook_likes (user_id, wordbook_id) VALUES ($1, $2)',
+                [req.user.id, id]
+            );
+            res.json({ message: 'いいねしました' });
+        } catch (err) {
+            // 既にいいねている場合はスキップ
+            if (err.code === '23505') {
+                res.status(400).json({ error: 'すでにいいねしています' });
+            } else {
+                throw err;
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * DELETE /api/wordbooks/:id/like
+ * 単語帳のいいねを削除
+ */
+router.delete('/:id/like', authenticate, async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 単語帳の存在確認
+        const wb = await db.query('SELECT id FROM wordbooks WHERE id = $1', [id]);
+        if (!wb.rows[0]) return res.status(404).json({ error: '単語帳が見つかりません' });
+
+        // いいねを削除
+        const result = await db.query(
+            'DELETE FROM wordbook_likes WHERE user_id = $1 AND wordbook_id = $2',
+            [req.user.id, id]
+        );
+
+        if (result.rowCount === 0) {
+            res.status(400).json({ error: 'いいねしていません' });
+        } else {
+            res.json({ message: 'いいねを取り消しました' });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * GET /api/wordbooks/:id/likes
+ * 単語帳のいいね情報を取得（いいね数、ログインユーザーがいいねしているか）
+ */
+router.get('/:id/likes', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // トークンがある場合はユーザーIDを取得
+        let currentUserId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const jwt = require('jsonwebtoken');
+            try {
+                const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'tangosns_secret_key');
+                currentUserId = decoded.id;
+            } catch (e) { }
+        }
+
+        // いいね数とログインユーザーのいいね状態を取得
+        const result = await db.query(
+            `SELECT COUNT(*) AS like_count,
+                    EXISTS(
+                        SELECT 1 FROM wordbook_likes WHERE wordbook_id = $1 AND user_id = $2
+                    ) AS liked_by_current_user
+             FROM wordbook_likes
+             WHERE wordbook_id = $1`,
+            [id, currentUserId]
+        );
+
+        const row = result.rows[0];
+        res.json({
+            like_count: parseInt(row.like_count),
+            liked_by_current_user: !!currentUserId && row.liked_by_current_user
+        });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'サーバーエラーが発生しました' });

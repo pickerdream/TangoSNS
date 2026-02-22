@@ -10,8 +10,16 @@ const router = async () => {
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || 'null');
 
-  // 未ログイン時のアクセス制限
-  if (!token && hash !== '#/login' && hash !== '#/register') {
+  // 未ログイン時のアクセス制限（特定のページを除く）
+  if (!token &&
+    hash !== '#/login' &&
+    hash !== '#/register' &&
+    hash !== '#/' &&
+    hash !== '#/terms' &&
+    hash !== '#/privacy' &&
+    !hash.startsWith('#/?') &&
+    !hash.startsWith('#/wordbook/') &&
+    !hash.startsWith('#/user/')) {
     renderLanding(appDiv);
     return;
   }
@@ -24,21 +32,33 @@ const router = async () => {
   } else if (hash === '#/' || hash.startsWith('#/?')) {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
-    await renderHomeFeed(layout.querySelector('.main'), token);
+    await renderHomeFeed(layout.querySelector('.main'), token, user);
   } else if (hash.startsWith('#/wordbook/')) {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     const id = hash.split('/')[2];
     await renderWordbookDetail(layout.querySelector('.main'), id, token, user);
   } else if (hash === '#/profile') {
+    if (!user) {
+      window.location.hash = '#/';
+      return;
+    }
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderMyProfile(layout.querySelector('.main'), token, user);
   } else if (hash === '#/settings') {
+    if (!user) {
+      window.location.hash = '#/';
+      return;
+    }
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderSettings(layout.querySelector('.main'), token, user);
   } else if (hash === '#/history') {
+    if (!user) {
+      window.location.hash = '#/';
+      return;
+    }
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderHistory(layout.querySelector('.main'));
@@ -48,6 +68,10 @@ const router = async () => {
     const username = hash.split('/')[2];
     await renderUserProfile(layout.querySelector('.main'), username, token);
   } else if (hash === '#/notifications') {
+    if (!user) {
+      window.location.hash = '#/';
+      return;
+    }
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderNotifications(layout.querySelector('.main'));
@@ -59,6 +83,10 @@ const router = async () => {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderAdminDashboard(layout.querySelector('.main'));
+  } else if (hash === '#/terms') {
+    renderTermsOfService(appDiv);
+  } else if (hash === '#/privacy') {
+    renderPrivacyPolicy(appDiv);
   }
 };
 
@@ -119,6 +147,68 @@ async function updateUnreadBadge() {
 
 // === レイアウト (サイドバー含む) ===
 function createLayout(user) {
+  // ゲストユーザー用レイアウト
+  if (!user) {
+    const container = document.createElement('div');
+    container.className = 'layout';
+    container.innerHTML = `
+      <div class="sidebar">
+        <a href="#/" class="sidebar-logo">
+          <span class="material-icons">menu_book</span>
+          TangoSNS
+        </a>
+        <div class="nav-links">
+          <a href="#/" class="nav-link"><span class="material-icons">home</span> ホーム</a>
+        </div>
+        <a href="#/login" class="btn-primary btn-wide sidebar-btn" style="background:var(--accent-color)">
+          <span class="material-icons" style="vertical-align:middle;margin-right:8px">login</span>ログイン
+        </a>
+        <a href="#/register" class="btn-primary btn-wide sidebar-btn" style="background:var(--bg-secondary); border:1px solid var(--border-color); color:var(--text-primary)">
+          <span class="material-icons" style="vertical-align:middle;margin-right:8px">person_add</span>登録
+        </a>
+      </div>
+      
+      <div class="main"></div>
+
+      <div class="right-sidebar">
+        <input type="text" id="searchInput" class="search-box" placeholder="単語帳を検索..." onkeydown="handleSearch(event)">
+        
+        <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
+          <h3 style="margin-bottom: 12px">急上昇</h3>
+          <div id="trendingWordsList" class="trending-words">
+            <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+          </div>
+        </div>
+        
+        <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
+          <h3 style="margin-bottom: 12px">人気のタグ</h3>
+          <div id="popularTagsList" class="popular-tags">
+            <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+          </div>
+        </div>
+        
+        <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
+          <h3 style="margin-bottom: 12px">おすすめ</h3>
+          <p style="color: var(--text-secondary); font-size: 14px;">ログインして、自分だけの単語帳を作ろう！</p>
+        </div>
+        
+        <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
+          <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
+          <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
+        </div>
+      </div>
+    `;
+
+    // 人気タグを非同期で取得
+    loadPopularTags();
+    loadTrendingWords();
+
+    renderGuestConsentPopup(container);
+
+    return container;
+  }
+
+  // ログイン済みユーザー用レイアウト
   const container = document.createElement('div');
   container.className = 'layout';
   container.innerHTML = `
@@ -177,14 +267,37 @@ function createLayout(user) {
         <h3 style="margin-bottom: 12px">おすすめ</h3>
         <p style="color: var(--text-secondary); font-size: 14px;">単語帳を作って、みんなと共有しましょう！学習を習慣化する第一歩です。</p>
       </div>
+      
+      <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
+        <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
+        <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
+      </div>
     </div>
   `;
-  
+
   // 人気タグを非同期で取得
   loadPopularTags();
   loadTrendingWords();
-  
+
   return container;
+}
+
+function renderGuestConsentPopup(container) {
+  // すでにポップアップが表示されているか、あるいは以前に同意したか（今回は毎回表示でも良いが、親切にするならsessionStorageなど）
+  // ユーザーの要望は「サービスを利用すると同意したとみなす旨のメッセージを表示」なので、常時表示または簡素な表示。
+  const popup = document.createElement('div');
+  popup.className = 'guest-consent-banner';
+  popup.innerHTML = `
+    <div class="guest-consent-content">
+      サービスを利用することで、
+      <a href="#/terms">利用規約</a>と
+      <a href="#/privacy">プライバシーポリシー</a>に同意したものとみなされます。
+    </div>
+    <button onclick="this.parentElement.remove()" style="color:white; opacity:0.7">
+      <span class="material-icons" style="font-size:18px">close</span>
+    </button>
+  `;
+  container.appendChild(popup);
 }
 
 async function loadPopularTags() {
@@ -192,13 +305,13 @@ async function loadPopularTags() {
     const tags = await fetchAPI('/tags/popular');
     const container = document.getElementById('popularTagsList');
     if (!container) return;
-    
+
     if (tags.length === 0) {
       container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">タグはまだありません</span>';
       return;
     }
-    
-    container.innerHTML = tags.map(t => 
+
+    container.innerHTML = tags.map(t =>
       `<a href="#/?tag=${encodeURIComponent(t.name)}" class="tag-chip">#${t.name}</a>`
     ).join('');
   } catch (e) {
@@ -212,13 +325,13 @@ async function loadTrendingWords() {
     const words = await fetchAPI('/trending/words');
     const container = document.getElementById('trendingWordsList');
     if (!container) return;
-    
+
     if (words.length === 0) {
       container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">まだありません</span>';
       return;
     }
-    
-    container.innerHTML = words.map(w => 
+
+    container.innerHTML = words.map(w =>
       `<div class="trending-word" onclick="window.location.hash='#/wordbook/${w.wordbook_id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
         <div style="font-weight: 600; font-size: 14px;">${w.word}</div>
         <div style="color: var(--text-secondary); font-size: 12px;">${w.meaning}</div>
@@ -262,6 +375,15 @@ function renderLanding(container) {
         </div>
         <p style="font-size: 15px; margin-bottom: 8px;">すでにアカウントをお持ちですか？</p>
         <a href="#/login" class="btn-primary" style="text-align: center; background: transparent; border: 1px solid var(--border-color); color: var(--accent-color);">ログイン</a>
+        <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary)">
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+          または
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+        </div>
+        <p style="font-size: 15px; margin-bottom: 8px; color: var(--text-secondary)">まず確認してみたい方</p>
+        <a href="#/" class="btn-primary" style="text-align: center; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary);">
+          <span class="material-icons" style="vertical-align:middle;margin-right:8px;font-size:18px">visibility</span>ホームを見る
+        </a>
       </div>
     </div>
   `;
@@ -310,6 +432,13 @@ function renderRegister(container) {
         <h1 style="text-align: center">アカウントを作成</h1>
         <input type="text" id="username" placeholder="ユーザー名" required>
         <input type="password" id="password" placeholder="パスワード (6文字以上)" required minlength="6">
+        <div style="display:flex; align-items:center; gap:8px; margin:16px 0">
+          <input type="checkbox" id="agreeTerms" required style="width:18px; height:18px; cursor:pointer">
+          <label for="agreeTerms" style="cursor:pointer; font-size:14px">
+            <a href="#/terms" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color); text-decoration:underline">利用規約</a>と
+            <a href="#/privacy" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color); text-decoration:underline">プライバシーポリシー</a>に同意する
+          </label>
+        </div>
         <button type="submit" class="btn-primary btn-wide">登録する</button>
         <div id="errorMsg" class="error-msg"></div>
         <p style="text-align: center; font-size: 14px; margin-top: 16px;">
@@ -323,6 +452,13 @@ function renderRegister(container) {
     e.preventDefault();
     const username = e.target.username.value;
     const password = e.target.password.value;
+    const agreeTerms = document.getElementById('agreeTerms').checked;
+
+    if (!agreeTerms) {
+      document.getElementById('errorMsg').textContent = '利用規約とプライバシーポリシーに同意してください';
+      return;
+    }
+
     try {
       const { user, token } = await fetchAPI('/auth/register', {
         method: 'POST', body: JSON.stringify({ username, password })
@@ -337,7 +473,7 @@ function renderRegister(container) {
 }
 
 // === ホームフィード ===
-async function renderHomeFeed(container) {
+async function renderHomeFeed(container, token, user) {
   const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
   const q = urlParams.get('q');
   const tag = urlParams.get('tag');
@@ -413,7 +549,26 @@ async function renderHomeFeed(container) {
         <h3 class="card-title">${wb.title}</h3>
         ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
         ${tagsHtml}
+        <div class="card-stats">
+          <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0}</span>
+          <span class="like-btn-home" data-wordbook-id="${wb.id}" style="cursor:pointer;display:flex;align-items:center;gap:4px">
+            <span class="material-icons like-icon-home" style="font-size:16px">favorite_border</span>
+            <span class="like-count-home">0</span>
+          </span>
+        </div>
       `;
+
+      // いいね情報を読み込む
+      const likeBtn = card.querySelector(`[data-wordbook-id="${wb.id}"]`);
+      if (likeBtn) {
+        loadLikeInfo(wb.id, likeBtn);
+        // いいねボタンのクリックハンドラを設定
+        likeBtn.onclick = (e) => {
+          e.stopPropagation();
+          toggleLikeHome(wb.id, likeBtn);
+        };
+      }
+
       feedList.appendChild(card);
     });
   } catch (err) {
@@ -676,7 +831,8 @@ async function renderWordbookDetail(container, wbId, token, user) {
 
   try {
     const wb = await fetchAPI(`/wordbooks/${wbId}`);
-    const isOwner = wb.user_id === user.id;
+    const isOwner = user && wb.user_id === user.id;
+    const isGuest = !user;
     const words = await fetchAPI(`/wordbooks/${wbId}/words`);
 
     let html = `
@@ -709,15 +865,25 @@ async function renderWordbookDetail(container, wbId, token, user) {
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">comment</span>${wb.comment_count || 0} コメント</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0} 閲覧</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">school</span>${wb.study_count || 0} 学習</span>
+          <span style="cursor:pointer" class="like-btn-detail" data-wordbook-id="${wb.id}">
+            <span class="material-icons like-icon-detail" style="vertical-align:middle;font-size:16px;margin-right:4px">favorite_border</span>
+            <span class="like-count-detail">0</span>
+          </span>
         </div>
         <div style="display:flex; gap:12px; margin-bottom:8px; align-items:center; flex-wrap:wrap">
-          ${words.length > 0 ? `<button class="btn-primary" onclick='startStudy(${wb.id}, ${JSON.stringify(words).replace(/'/g, "&#39;")})'><span class="material-icons" style="vertical-align:middle;margin-right:8px">school</span>学習を始める</button>` : ''}
-          <button class="btn-primary" style="background:transparent; border:1px solid var(--accent-color); color:var(--accent-color)" onclick="startMistakeStudy(${wb.id})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">replay</span>間違えた単語を復習</button>
-          
-          <button id="toggleCompleteBtn" class="btn-primary" style="background:${wb.is_completed ? '#00ba7c' : 'transparent'}; border:1px solid ${wb.is_completed ? '#00ba7c' : 'var(--border-color)'}; color:${wb.is_completed ? 'white' : 'var(--text-secondary)'}">
-            <span class="material-icons" style="vertical-align:middle;margin-right:8px">${wb.is_completed ? 'check_circle' : 'radio_button_unchecked'}</span>
-            ${wb.is_completed ? '完了済み' : '完了にする'}
-          </button>
+          ${isGuest ? `
+            <button class="btn-primary" onclick="window.location.hash='#/login'" style="background:var(--accent-color)">
+              <span class="material-icons" style="vertical-align:middle;margin-right:8px">login</span>ログインして学習を始める
+            </button>
+          ` : `
+            ${words.length > 0 ? `<button class="btn-primary" onclick='startStudy(${wb.id}, ${JSON.stringify(words).replace(/'/g, "&#39;")})'><span class="material-icons" style="vertical-align:middle;margin-right:8px">school</span>学習を始める</button>` : ''}
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--accent-color); color:var(--accent-color)" onclick="startMistakeStudy(${wb.id})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">replay</span>間違えた単語を復習</button>
+            
+            <button id="toggleCompleteBtn" class="btn-primary" style="background:${wb.is_completed ? '#00ba7c' : 'transparent'}; border:1px solid ${wb.is_completed ? '#00ba7c' : 'var(--border-color)'}; color:${wb.is_completed ? 'white' : 'var(--text-secondary)'}">
+              <span class="material-icons" style="vertical-align:middle;margin-right:8px">${wb.is_completed ? 'check_circle' : 'radio_button_unchecked'}</span>
+              ${wb.is_completed ? '完了済み' : '完了にする'}
+            </button>
+          `}
 
           ${isOwner ? `
             <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); margin-left:auto" onclick='openEditWordbookModal(${JSON.stringify(wb).replace(/'/g, "&#39;")})'>
@@ -737,38 +903,90 @@ async function renderWordbookDetail(container, wbId, token, user) {
         </form>
       ` : ''}
       
-      <div class="word-list" id="wordList"></div>
+      <div style="padding:16px; border-bottom:1px solid var(--border-color)">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+          <h3 style="margin:0; flex:1">登録された単語</h3>
+          <button type="button" id="toggleWordsBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px">
+            <span class="material-icons" style="vertical-align:middle; font-size:18px">expand_more</span>
+          </button>
+        </div>
+        
+        <table style="width:100%; border-collapse:collapse; font-size:14px">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border-color)">
+              <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">単語</th>
+              <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">意味</th>
+              ${isOwner ? '<th style="text-align:center; padding:12px; font-weight:bold; color:var(--text-secondary); width:50px">削除</th>' : ''}
+            </tr>
+          </thead>
+          <tbody id="wordTableBody">
+          </tbody>
+        </table>
+      </div>
       
       <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:16px">
         <h3 style="padding:0 16px; margin-bottom:16px;">コメント</h3>
-        <form class="add-form" id="addCommentForm" style="border:none">
-          <input type="text" id="newComment" placeholder="コメントを投稿..." required>
-          <button type="submit" class="btn-primary" style="padding:8px 16px">返信</button>
-        </form>
+        ${isGuest ? `
+          <div style="padding:16px; background:var(--bg-secondary); border-radius:8px; margin-bottom:16px; text-align:center">
+            <p style="color:var(--text-secondary); margin-bottom:12px">コメントを投稿するにはログインしてください</p>
+            <a href="#/login" class="btn-primary" style="display:inline-block; padding:8px 16px; text-decoration:none">ログイン</a>
+          </div>
+        ` : `
+          <form class="add-form" id="addCommentForm" style="border:none">
+            <input type="text" id="newComment" placeholder="コメントを投稿..." required>
+            <button type="submit" class="btn-primary" style="padding:8px 16px">返信</button>
+          </form>
+        `}
         <div id="commentList"></div>
       </div>
     `;
     container.innerHTML = html;
 
-    // 単語一覧の描画
-    const wl = document.getElementById('wordList');
-    words.forEach(w => {
-      wl.innerHTML += `
-        <div class="word-item">
-          <div>
-            <div class="word">${w.word}</div>
-            <div class="meaning">${w.meaning}</div>
-          </div>
-          ${isOwner ? `<button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons">delete</span></button>` : ''}
-        </div>
-      `;
-    });
+    // 単語一覧の描画（表形式）
+    const wordTableBody = document.getElementById('wordTableBody');
+    const maxRows = 10;
+    let isExpanded = false;
+
+    function renderWordTable() {
+      wordTableBody.innerHTML = '';
+      const visibleWords = isExpanded ? words : words.slice(0, maxRows);
+      visibleWords.forEach(w => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid var(--border-color)';
+        row.innerHTML = `
+          <td style="padding:12px; color:var(--text-primary)">${w.word}</td>
+          <td style="padding:12px; color:var(--text-primary)">${w.meaning}</td>
+          ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
+        `;
+        wordTableBody.appendChild(row);
+      });
+    }
+
+    // トグルボタンのイベントリスナー
+    const toggleWordsBtn = document.getElementById('toggleWordsBtn');
+    if (toggleWordsBtn && words.length > maxRows) {
+      toggleWordsBtn.onclick = () => {
+        isExpanded = !isExpanded;
+        renderWordTable();
+        toggleWordsBtn.innerHTML = isExpanded
+          ? '<span class="material-icons" style="vertical-align:middle; font-size:18px">expand_less</span>'
+          : '<span class="material-icons" style="vertical-align:middle; font-size:18px">expand_more</span>';
+      };
+    } else if (toggleWordsBtn && words.length <= maxRows) {
+      // 単語数が少ない場合はボタンを不可にする
+      toggleWordsBtn.disabled = true;
+      toggleWordsBtn.style.opacity = '0.5';
+      toggleWordsBtn.style.cursor = 'not-allowed';
+    }
+
+    // 初期描画
+    renderWordTable();
 
     // コメント一覧の描画
     const comments = await fetchAPI(`/wordbooks/${wbId}/comments`);
     const cl = document.getElementById('commentList');
     comments.forEach(c => {
-      const isCmdOwner = c.user_id === user.id;
+      const isCmdOwner = user && c.user_id === user.id;
       cl.innerHTML += `
         <div style="padding:16px; border-bottom:1px solid var(--border-color); display:flex; gap:12px; align-items:flex-start">
           <div class="avatar" style="width:32px; height:32px; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${c.username}'">
@@ -798,26 +1016,49 @@ async function renderWordbookDetail(container, wbId, token, user) {
       };
     }
 
-    document.getElementById('addCommentForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const comment = e.target.newComment.value;
+    // いいね情報を読み込む
+    const likeBtnDetail = document.querySelector(`[data-wordbook-id="${wb.id}"]`);
+    if (likeBtnDetail) {
       try {
-        await fetchAPI(`/wordbooks/${wbId}/comments`, { method: 'POST', body: JSON.stringify({ comment }) });
-        renderWordbookDetail(container, wbId, token, user);
-      } catch (err) { alert(err.message); }
-    };
+        loadLikeInfo(wb.id, likeBtnDetail);
 
-    // 完了トグルイベント
-    document.getElementById('toggleCompleteBtn').onclick = async () => {
-      try {
-        if (wb.is_completed) {
-          await fetchAPI(`/completions/${wbId}`, { method: 'DELETE' });
-        } else {
-          await fetchAPI(`/completions/${wbId}`, { method: 'POST' });
-        }
-        renderWordbookDetail(container, wbId, token, user);
-      } catch (err) { alert(err.message); }
-    };
+        // いいねボタンのクリックハンドラを設定
+        likeBtnDetail.onclick = (e) => {
+          e.stopPropagation();
+          toggleLikeDetail(wb.id, likeBtnDetail);
+        };
+      } catch (err) {
+        console.error('いいね情報の読み込みに失敗しました:', err);
+      }
+    }
+
+    // コメントフォーム
+    const commentForm = document.getElementById('addCommentForm');
+    if (commentForm) {
+      commentForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const comment = e.target.newComment.value;
+        try {
+          await fetchAPI(`/wordbooks/${wbId}/comments`, { method: 'POST', body: JSON.stringify({ comment }) });
+          renderWordbookDetail(container, wbId, token, user);
+        } catch (err) { alert(err.message); }
+      };
+    }
+
+    // 完了トグルイベント（ログインユーザーのみ）
+    const toggleCompleteBtn = document.getElementById('toggleCompleteBtn');
+    if (toggleCompleteBtn && !isGuest) {
+      toggleCompleteBtn.onclick = async () => {
+        try {
+          if (wb.is_completed) {
+            await fetchAPI(`/completions/${wbId}`, { method: 'DELETE' });
+          } else {
+            await fetchAPI(`/completions/${wbId}`, { method: 'POST' });
+          }
+          renderWordbookDetail(container, wbId, token, user);
+        } catch (err) { alert(err.message); }
+      };
+    }
 
   } catch (err) {
     container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
@@ -1145,9 +1386,16 @@ async function renderUserProfile(container, username, token) {
   try {
     const data = await fetchAPI(`/users/${username}`);
     const { user, wordbooks } = data;
-    const me = JSON.parse(localStorage.getItem('user') || '{}');
-    const isAdmin = me.is_admin === true;
-    const isMe = me.id === user.id;
+
+    // ユーザーが見つからない場合
+    if (!user) {
+      container.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)"><p>ユーザーが見つかりません。</p><a href="#/" style="color:var(--accent-color)">ホームに戻る</a></div>`;
+      return;
+    }
+
+    const me = JSON.parse(localStorage.getItem('user') || 'null');
+    const isAdmin = me && me.is_admin === true;
+    const isMe = me && me.id === user.id;
 
     const adminMenu = (isAdmin && !isMe) ? `
       <div class="admin-dropdown">
@@ -1249,7 +1497,7 @@ async function renderNotifications(container) {
       const d = new Date(n.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const item = document.createElement('div');
       item.className = `notification-item ${n.is_read ? '' : 'unread'}`;
-      
+
       if (n.type === 'warning') {
         // 警告通知は確認が必要
         item.onclick = async () => {
@@ -1283,7 +1531,7 @@ async function renderNotifications(container) {
           ${n.is_read ? '' : '<div class="notification-dot"></div>'}
         `;
       }
-      
+
       list.appendChild(item);
     });
   } catch (err) {
@@ -1380,7 +1628,7 @@ async function renderAdminDashboard(container) {
           : '<span class="badge badge-active">有効</span>';
 
       const tr = document.createElement('tr');
-      const ipDisplay = u.registration_ip 
+      const ipDisplay = u.registration_ip
         ? `<span style="cursor:pointer;color:var(--accent-color)" onclick="showIpUsers('${u.registration_ip}')">${u.registration_ip}</span>`
         : '-';
       tr.innerHTML = `
@@ -1403,13 +1651,13 @@ async function renderAdminDashboard(container) {
               <span class="material-icons" style="font-size:16px">warning</span>
             </button>
             ${!u.is_admin ? (u.is_banned
-              ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id})" title="BAN解除">
+          ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id})" title="BAN解除">
                    <span class="material-icons" style="font-size:16px">lock_open</span>
                  </button>`
-              : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN">
+          : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN">
                    <span class="material-icons" style="font-size:16px">block</span>
                  </button>`
-            ) : ''}
+        ) : ''}
             ${!u.is_admin ? `<button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${u.username}')" title="削除">
               <span class="material-icons" style="font-size:16px">delete</span>
             </button>` : ''}
@@ -1517,7 +1765,7 @@ window.unbanUser = async (userId) => {
 window.showWarnings = async (userId, username) => {
   try {
     const warnings = await fetchAPI(`/admin/users/${userId}/warnings`);
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
@@ -1527,9 +1775,9 @@ window.showWarnings = async (userId, username) => {
           <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
         </div>
         <div style="padding-top:16px;max-height:400px;overflow-y:auto">
-          ${warnings.length === 0 
-            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">警告履歴はありません。</p>'
-            : warnings.map(w => `
+          ${warnings.length === 0
+        ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">警告履歴はありません。</p>'
+        : warnings.map(w => `
               <div style="padding:12px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:flex-start">
                 <div>
                   <div style="font-size:14px;margin-bottom:4px">${w.reason}</div>
@@ -1542,7 +1790,7 @@ window.showWarnings = async (userId, username) => {
                 </button>
               </div>
             `).join('')
-          }
+      }
         </div>
       </div>
     `;
@@ -1594,7 +1842,7 @@ document.addEventListener('click', () => {
 window.showIpLogs = async (userId, username) => {
   try {
     const logs = await fetchAPI(`/admin/users/${userId}/ip-logs`);
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
@@ -1604,9 +1852,9 @@ window.showIpLogs = async (userId, username) => {
           <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
         </div>
         <div style="padding-top:16px;max-height:400px;overflow-y:auto">
-          ${logs.length === 0 
-            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">アクティビティログはありません。</p>'
-            : `<table class="admin-table" style="font-size:13px">
+          ${logs.length === 0
+        ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">アクティビティログはありません。</p>'
+        : `<table class="admin-table" style="font-size:13px">
                 <thead>
                   <tr>
                     <th>日時</th>
@@ -1633,7 +1881,7 @@ window.showIpLogs = async (userId, username) => {
                   `).join('')}
                 </tbody>
               </table>`
-          }
+      }
         </div>
       </div>
     `;
@@ -1655,7 +1903,7 @@ function changeSort(sortValue) {
 window.showIpUsers = async (ip) => {
   try {
     const users = await fetchAPI(`/admin/ip/${encodeURIComponent(ip)}/users`);
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
@@ -1665,9 +1913,9 @@ window.showIpUsers = async (ip) => {
           <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
         </div>
         <div style="padding-top:16px;max-height:400px;overflow-y:auto">
-          ${users.length === 0 
-            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">このIPからのユーザーはいません。</p>'
-            : `<div style="margin-bottom:12px;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:13px">
+          ${users.length === 0
+        ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">このIPからのユーザーはいません。</p>'
+        : `<div style="margin-bottom:12px;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:13px">
                 <strong>${users.length}人</strong>のユーザーがこのIPを使用
               </div>
               ${users.map(u => `
@@ -1682,7 +1930,7 @@ window.showIpUsers = async (ip) => {
                   ${u.is_banned ? '<span class="badge badge-banned">BAN</span>' : ''}
                 </div>
               `).join('')}`
-          }
+      }
         </div>
       </div>
     `;
@@ -1691,3 +1939,262 @@ window.showIpUsers = async (ip) => {
     alert(err.message);
   }
 };
+
+// === いいね機能 ===
+async function loadLikeInfo(wordbookId, likeBtn) {
+  try {
+    const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
+    const countSpan = likeBtn.querySelector('.like-count-home') || likeBtn.querySelector('.like-count-detail');
+    const icon = likeBtn.querySelector('.like-icon-home') || likeBtn.querySelector('.like-icon-detail');
+
+    if (countSpan) countSpan.textContent = likes.like_count;
+
+    if (likes.liked_by_current_user && icon) {
+      icon.textContent = 'favorite';
+      icon.style.color = 'var(--error-color)';
+    }
+  } catch (err) {
+    console.error('いいね情報の読み込みに失敗しました:', err);
+  }
+}
+
+async function toggleLikeHome(wordbookId, element) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('ログインしてください');
+    return;
+  }
+
+  try {
+    const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
+
+    if (likes.liked_by_current_user) {
+      // いいねを取り消す
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
+        method: 'DELETE'
+      });
+    } else {
+      // いいねを追加
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
+        method: 'POST'
+      });
+    }
+
+    // いいね情報を再読み込み
+    loadLikeInfo(wordbookId, element);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function toggleLikeDetail(wordbookId, element) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('ログインしてください');
+    return;
+  }
+
+  try {
+    const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
+
+    if (likes.liked_by_current_user) {
+      // いいねを取り消す
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
+        method: 'DELETE'
+      });
+    } else {
+      // いいねを追加
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
+        method: 'POST'
+      });
+    }
+
+    // いいね情報を再読み込み
+    loadLikeInfo(wordbookId, element);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// === 利用規約 ===
+function renderTermsOfService(container) {
+  container.innerHTML = `
+    <div style="max-width:900px; margin:0 auto; padding:32px 16px">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px">
+        <button onclick="history.back()" style="background:none; border:none; cursor:pointer; padding:0">
+          <span class="material-icons">arrow_back</span>
+        </button>
+        <h1>利用規約</h1>
+      </div>
+      
+      <div style="background:var(--bg-secondary); padding:24px; border-radius:16px; line-height:1.8; color:var(--text-primary)">
+        <p><strong>最終更新日: 2026年2月23日</strong></p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第1条 はじめに</h2>
+        <p>
+          TangoSNS（以下「本サービス」）は、ユーザーが単語帳を作成・共有し、
+          コミュニティを通じて学習する場を提供するサービスです。
+          本利用規約（以下「本規約」）は、本サービスの利用条件を定めます。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第2条 利用者の定義</h2>
+        <p>
+          本サービスは、13歳以上の個人および法人（以下「ユーザー」）を対象としています。
+          13歳未満の方はご利用いただけません。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第3条 ユーザーの責務</h2>
+        <p>ユーザーは以下の行為を行わないことに同意します:</p>
+        <ul style="margin-left:20px">
+          <li>他のユーザーの名誉や信用を傷つける行為</li>
+          <li>違法行為や不正行為</li>
+          <li>スパムや詐欺的な内容の投稿</li>
+          <li>著作権または知的財産権の侵害</li>
+          <li>本サービスのセキュリティを妨害する行為</li>
+          <li>他のユーザーへの嫌がらせまたはいじめ</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第4条 コンテンツの所有権</h2>
+        <p>
+          ユーザーが投稿した単語帳、単語、コメント等（以下「ユーザーコンテンツ」）の
+          著作権はユーザーに帰属します。ただし、本サービスの運営・改善のため、
+          本サービスにユーザーコンテンツの利用許諾を与えるものとします。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第5条 利用禁止事項</h2>
+        <p>以下の行為は禁止されています:</p>
+        <ul style="margin-left:20px">
+          <li>本サービスの改ざん、破壊</li>
+          <li>自動化ツールやボットによるアクセス（公式APIの利用を除く）</li>
+          <li>他のユーザーのアカウント情報の不正取得</li>
+          <li>本サービスへの過度なアクセス（DDoS攻撃等）</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第6条 アカウント停止・削除</h2>
+        <p>
+          本規約に違反する行為が確認された場合、
+          事前通知なくアカウントを停止・削除する場合があります。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第7条 免責事項</h2>
+        <p>
+          本サービスは「現状のまま」提供されます。
+          本サービスの利用によって生じた損害について、
+          サービス提供者は一切責任を負いません。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第8条 規約の変更</h2>
+        <p>
+          本規約は予告なく変更される場合があります。
+          変更後の規約に同意されない場合は、本サービスのご利用をお断りください。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第9条 準拠法</h2>
+        <p>本規約は日本法に準拠し、日本の裁判所を管轄とします。</p>
+        
+        <p style="margin-top:32px; text-align:center; color:var(--text-secondary); font-size:12px">
+          ご不明な点がある場合は、お問合わせください。
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// === プライバシーポリシー ===
+function renderPrivacyPolicy(container) {
+  container.innerHTML = `
+    <div style="max-width:900px; margin:0 auto; padding:32px 16px">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px">
+        <button onclick="history.back()" style="background:none; border:none; cursor:pointer; padding:0">
+          <span class="material-icons">arrow_back</span>
+        </button>
+        <h1>プライバシーポリシー</h1>
+      </div>
+      
+      <div style="background:var(--bg-secondary); padding:24px; border-radius:16px; line-height:1.8; color:var(--text-primary)">
+        <p><strong>最終更新日: 2026年2月23日</strong></p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第1条 個人情報の収集</h2>
+        <p>本サービス利用時に、以下の情報を収集します:</p>
+        <ul style="margin-left:20px">
+          <li><strong>登録情報:</strong> ユーザー名、パスワード、メールアドレス（取得時）</li>
+          <li><strong>プロフィール情報:</strong> プロフィール写真、自己紹介</li>
+          <li><strong>アクティビティ情報:</strong> 学習履歴、作成した単語帳、コメント</li>
+          <li><strong>アクセスログ:</strong> IPアドレス、アクセス日時、ブラウザ情報</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第2条 個人情報の利用目的</h2>
+        <p>収集した個人情報は以下の目的で使用します:</p>
+        <ul style="margin-left:20px">
+          <li>本サービスの提供・改善</li>
+          <li>ユーザーサポートの実施</li>
+          <li>不正行為の検知・防止</li>
+          <li>サービス利用統計の作成（匿名化）</li>
+          <li>重要なお知らせの配信</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第3条 情報の安全管理</h2>
+        <p>
+          パスワードはハッシュ化して保存されます。
+          HTTPS通信により、データ送受信時の安全性を確保しています。
+          ただし、インターネット上の通信に絶対の安全性はないことをご理解ください。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第4条 ビュー数とアクティビティ記録</h2>
+        <p>
+          本サービスは単語帳のビュー数を記録します。
+          ログイン済みユーザーの場合、ユーザーIDで識別します。
+          ゲストユーザーの場合、IPアドレス・ポート番号で識別します。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第5条 情報の第三者提供</h2>
+        <p>
+          本サービスは、ユーザーの同意を得ずに第三者に個人情報を提供しません。
+          ただし、以下の場合は例外とします:
+        </p>
+        <ul style="margin-left:20px">
+          <li>法律上の要求に基づく場合</li>
+          <li>不正行為の調査・防止に必要と判断される場合</li>
+          <li>ユーザーの生命・身体・財産の危険から保護する必要がある場合</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第6条 Cookie・トラッキング</h2>
+        <p>
+          本サービスはローカルストレージを利用して、
+          ユーザー認証情報やテーマ設定を保存します。
+          これは個人を特定できない形式です。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第7条 データの保有期間</h2>
+        <p>
+          ゲストユーザーのビュー履歴（IP+ポート）は30日後に自動削除されます。
+          アカウント削除時は、ユーザーコンテンツを除いて個人情報は削除されます。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第8条 ユーザーの権利</h2>
+        <p>ユーザーは以下の権利を有します:</p>
+        <ul style="margin-left:20px">
+          <li>個人情報の開示請求</li>
+          <li>個人情報の修正・削除要求</li>
+          <li>アカウントの削除</li>
+        </ul>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第9条 お問合わせ</h2>
+        <p>
+          本ポリシーについてのご質問・ご不明な点がある場合は、
+          お気軽にお問合わせください。
+        </p>
+        
+        <h2 style="margin-top:32px; margin-bottom:16px; font-size:18px">第10条 ポリシーの変更</h2>
+        <p>
+          本ポリシーは予告なく変更される場合があります。
+          変更時は本ページにて通知いたします。
+        </p>
+        
+        <p style="margin-top:32px; text-align:center; color:var(--text-secondary); font-size:12px">
+          ご質問・ご要望はいつでもお受けしております。
+        </p>
+      </div>
+    </div>
+  `;
+}
