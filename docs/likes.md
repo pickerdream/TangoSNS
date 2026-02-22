@@ -33,7 +33,7 @@ CREATE INDEX idx_wordbook_likes_wordbook_id ON wordbook_likes(wordbook_id);
 
 ### 1. 単語帳のいいね情報取得
 ```
-GET /wordbooks/:id/likes
+GET /api/wordbooks/:id/likes
 ```
 
 **レスポンス例：**
@@ -53,7 +53,7 @@ GET /wordbooks/:id/likes
 
 ### 2. いいねを追加
 ```
-POST /wordbooks/:id/likes
+POST /api/wordbooks/:id/like
 ```
 
 **認証：** 必須（JWT トークン）
@@ -73,7 +73,7 @@ POST /wordbooks/:id/likes
 
 ### 3. いいねを取消
 ```
-DELETE /wordbooks/:id/likes/:likeId
+DELETE /api/wordbooks/:id/like
 ```
 
 **認証：** 必須（JWT トークン、本人確認）

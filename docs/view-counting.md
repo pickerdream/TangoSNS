@@ -16,7 +16,7 @@ CREATE TABLE wordbook_views (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   wordbook_id INTEGER NOT NULL REFERENCES wordbooks(id) ON DELETE CASCADE,
-  last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
   UNIQUE(user_id, wordbook_id)
 );
@@ -29,7 +29,7 @@ CREATE INDEX idx_wordbook_views_last_viewed_at ON wordbook_views(last_viewed_at)
 - `id`: 主キー
 - `user_id`: ビューしたユーザーID
 - `wordbook_id`: ビューされた単語帳ID
-- `last_viewed_at`: 最後にビューた日時（1時間ごとの制限チェックに使用）
+- `viewed_at`: 最後にビューた日時（1時間ごとの制限チェックに使用）
 
 ### `guest_wordbook_views` テーブル（ゲストユーザー用）
 
@@ -39,7 +39,7 @@ CREATE TABLE guest_wordbook_views (
   ip_address VARCHAR(45),           -- IPv4 / IPv6 対応
   port INTEGER,
   wordbook_id INTEGER NOT NULL REFERENCES wordbooks(id) ON DELETE CASCADE,
-  last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
   UNIQUE(ip_address, port, wordbook_id)
 );
@@ -53,7 +53,7 @@ CREATE INDEX idx_guest_wordbook_views_last_viewed_at ON guest_wordbook_views(las
 - `ip_address`: クライアントのIPアドレス
 - `port`: クライアントのポート番号（異なるポートからのアクセスは別カウント）
 - `wordbook_id`: ビューされた単語帳ID
-- `last_viewed_at`: 最後にビューした日時
+- `viewed_at`: 最後にビューした日時
 
 ## APIエンドポイント
 
@@ -103,12 +103,12 @@ app.get('/:id', async (req, res) => {
 
 ```javascript
 async function checkAndCountView(userId, wordbook_id, ipAddress) {
-  const onHourAgo = new Date(Date.now() - 60 * 60 * 1000);  // 1時間前
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);  // 1時間前
   
   if (userId) {
     // ログイン済みユーザーの場合
     const { rows } = await db.query(
-      `SELECT id, last_viewed_at FROM wordbook_views
+      `SELECT id, viewed_at FROM wordbook_views
        WHERE user_id = $1 AND wordbook_id = $2`,
       [userId, wordbook_id]
     );
@@ -141,8 +141,7 @@ async function checkAndCountView(userId, wordbook_id, ipAddress) {
     const port = parseInt(ipAddress.split(':')[1]) || 0;  // ポート番号を抽出
     const ip = ipAddress.split(':')[0];
     
-    const { rows } = await db.query(
-      `SELECT id, last_viewed_at FROM guest_wordbook_views
+      `SELECT id, viewed_at FROM guest_wordbook_views
        WHERE ip_address = $1 AND port = $2 AND wordbook_id = $3`,
       [ip, port, wordbook_id]
     );
@@ -150,16 +149,16 @@ async function checkAndCountView(userId, wordbook_id, ipAddress) {
     if (rows.length === 0) {
       // 初めての閲覧 → 記録を作成
       await db.query(
-        `INSERT INTO guest_wordbook_views (ip_address, port, wordbook_id, last_viewed_at)
+        `INSERT INTO guest_wordbook_views (ip_address, port, wordbook_id, viewed_at)
          VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
         [ip, port, wordbook_id]
       );
       return true;
-    } else if (rows[0].last_viewed_at < onHourAgo) {
+    } else if (rows[0].viewed_at < oneHourAgo) {
       // 1時間以上前の閲覧 → カウント
       await db.query(
         `UPDATE guest_wordbook_views
-         SET last_viewed_at = CURRENT_TIMESTAMP
+         SET viewed_at = CURRENT_TIMESTAMP
          WHERE ip_address = $1 AND port = $2 AND wordbook_id = $3`,
         [ip, port, wordbook_id]
       );
@@ -197,7 +196,7 @@ module.exports = {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         wordbook_id INTEGER NOT NULL REFERENCES wordbooks(id) ON DELETE CASCADE,
-        last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, wordbook_id)
       )
     `);
@@ -207,8 +206,8 @@ module.exports = {
       ON wordbook_views(wordbook_id)
     `);
     await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_wordbook_views_last_viewed_at 
-      ON wordbook_views(last_viewed_at)
+      CREATE INDEX IF NOT EXISTS idx_wordbook_views_viewed_at 
+      ON wordbook_views(viewed_at)
     `);
   },
   down: async (db) => {
@@ -228,7 +227,7 @@ module.exports = {
         ip_address VARCHAR(45),
         port INTEGER,
         wordbook_id INTEGER NOT NULL REFERENCES wordbooks(id) ON DELETE CASCADE,
-        last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(ip_address, port, wordbook_id)
       )
     `);
@@ -238,8 +237,8 @@ module.exports = {
       ON guest_wordbook_views(wordbook_id)
     `);
     await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_guest_wordbook_views_last_viewed_at 
-      ON guest_wordbook_views(last_viewed_at)
+      CREATE INDEX IF NOT EXISTS idx_guest_wordbook_views_viewed_at 
+      ON guest_wordbook_views(viewed_at)
     `);
   },
   down: async (db) => {
@@ -298,7 +297,7 @@ await db.query(`
 ### インデックス戦略
 
 - `wordbook_id`: 単語帳ごとのビュー集計時に使用
-- `last_viewed_at`: 定期的な古いレコード削除の際に使用
+- `viewed_at`: 定期的な古いレコード削除の際に使用
 
 ## プライバシー考慮
 

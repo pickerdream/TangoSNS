@@ -186,23 +186,31 @@ TangoSNSで使用される主なMaterial Iconsアイコン：
 
 ```css
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --text-primary: #000000;
-  --text-secondary: #666666;
-  --border-color: #e0e0e0;
-  --accent-color: #3b82f6;  /* ブルー */
-  --error-color: #dc2626;   /* レッド */
+  --bg-color: #ffffff;
+  --bg-secondary: #f7f9f9;
+  --bg-hover: #f0f3f4;
+  --bg-input: #f7f9f9;
+  --text-primary: #0f1419;
+  --text-secondary: #536471;
+  --accent-color: #00ba7c;
+  --accent-hover: #00a26b;
+  --border-color: #eff3f4;
+  --error-color: #f4212e;
+  --header-bg: rgba(255, 255, 255, 0.85);
 }
 
 [data-theme="dark"] {
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #2d2d2d;
-  --text-primary: #ffffff;
-  --text-secondary: #999999;
-  --border-color: #404040;
-  --accent-color: #60a5fa;
-  --error-color: #ef4444;
+  --bg-color: #000000;
+  --bg-secondary: #16181c;
+  --bg-hover: #eff3f41a;
+  --bg-input: #202327;
+  --text-primary: #e7e9ea;
+  --text-secondary: #71767b;
+  --accent-color: #00ba7c;
+  --accent-hover: #00a26b;
+  --border-color: #2f3336;
+  --error-color: #f4212e;
+  --header-bg: rgba(0, 0, 0, 0.65);
 }
 ```
 

@@ -91,7 +91,34 @@ if (!token &&
 - 設定リンク
 - 管理者パネル（管理者のみ）
 
+### ゲスト向け同意バナー（`public/app.js` - `renderGuestConsentPopup` 関数）
+
+ゲストユーザーに対して、サービス利用が利用規約およびプライバシーポリシーへの同意とみなされることを通知するバナーを表示します。
+
+- **表示条件**: ログインしていないユーザーがアクセスした際、レイアウト生成時に自動的に表示。
+- **デザイン**: 画面下部に固定（Fixed）、アプリケーションのテーマに合わせたアクセントカラー（グリーン）で表示。
+- **機能**: 利用規約とプライバシーポリシーへの直接リンクを提供し、バナーを閉じるボタン（×）を配置。
+
+```javascript
+function renderGuestConsentPopup(container) {
+  const popup = document.createElement('div');
+  popup.className = 'guest-consent-banner';
+  popup.innerHTML = `
+    <div class="guest-consent-content">
+      サービスを利用することで、
+      <a href="#/terms">利用規約</a>と
+      <a href="#/privacy">プライバシーポリシー</a>に同意したものとみなされます。
+    </div>
+    <button onclick="this.parentElement.remove()" style="color:white; opacity:0.7">
+      <span class="material-icons" style="font-size:18px">close</span>
+    </button>
+  `;
+  container.appendChild(popup);
+}
+```
+
 ### ゲスト向けCTA（Call To Action）
+
 
 各ページにおいて、ゲストユーザーを登録・ログインに導くメッセージを配置：
 
