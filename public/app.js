@@ -33,7 +33,11 @@ const router = async () => {
   } else if (hash === '#/profile') {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
-    await renderProfileEdit(layout.querySelector('.main'), token, user);
+    await renderMyProfile(layout.querySelector('.main'), token, user);
+  } else if (hash === '#/settings') {
+    const layout = createLayout(user);
+    appDiv.appendChild(layout);
+    await renderSettings(layout.querySelector('.main'), token, user);
   } else if (hash === '#/history') {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
@@ -123,6 +127,7 @@ function createLayout(user) {
           <span class="badge-unread" id="unreadBadge" style="display:none"></span>
         </a>
         <a href="#/profile" class="nav-link"><span class="material-icons">person</span> プロフィール</a>
+        <a href="#/settings" class="nav-link"><span class="material-icons">settings</span> 設定</a>
       </div>
       <button class="btn-primary btn-wide sidebar-btn" onclick="openCreateModal()">単語帳を作成</button>
       
@@ -316,27 +321,16 @@ async function renderHomeFeed(container) {
   }
 }
 
-// === マイプロフィール編集 ===
-async function renderProfileEdit(container, token, user) {
+// === 設定 (テーマ・パスワード) ===
+async function renderSettings(container, token, user) {
   container.innerHTML = `
     <div class="header">
-      <h2>プロフィールを編集</h2>
+      <h2>設定</h2>
     </div>
     <div style="padding: 24px;">
-      <form id="profileForm" style="display:flex; flex-direction:column; gap:16px;">
+      <form id="settingsForm" style="display:flex; flex-direction:column; gap:16px;">
         <div>
-          <label style="color:var(--text-secondary);font-size:14px">ユーザー名</label>
-          <input type="text" id="username" value="${user.username}" required>
-        </div>
-        <div>
-          <label style="color:var(--text-secondary);font-size:14px">アイコン画像のURL</label>
-          <input type="url" id="avatar_url" value="${user.avatar_url || ''}" placeholder="https://example.com/image.png">
-        </div>
-        <div>
-          <label style="color:var(--text-secondary);font-size:14px">自己紹介</label>
-          <textarea id="bio" placeholder="自分の情報を入力..." style="height:100px;">${user.bio || ''}</textarea>
-        </div>
-        <div>
+          <h3 style="margin-bottom:12px">一般</h3>
           <label style="color:var(--text-secondary);font-size:14px">テーマ設定</label>
           <select id="theme" style="width:100%; padding:10px; border-radius:4px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-color)">
             <option value="system" ${user.theme === 'system' ? 'selected' : ''}>システム設定に従う</option>
@@ -345,7 +339,7 @@ async function renderProfileEdit(container, token, user) {
           </select>
         </div>
         <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border-color)">
-          <h3 style="margin-bottom:16px">パスワード変更</h3>
+          <h3 style="margin-bottom:16px">セキュリティ</h3>
           <div>
             <label style="color:var(--text-secondary);font-size:14px">現在のパスワード (変更時のみ)</label>
             <input type="password" id="currentPassword">
@@ -359,22 +353,19 @@ async function renderProfileEdit(container, token, user) {
         <div style="display:flex; justify-content:flex-end; margin-top:16px">
           <button type="submit" class="btn-primary" style="width:fit-content">保存する</button>
         </div>
-        <div id="profileError" class="error-msg"></div>
-        <div id="profileSuccess" style="color:#00ba7c; font-size:14px; margin-top:8px"></div>
+        <div id="settingsError" class="error-msg"></div>
+        <div id="settingsSuccess" style="color:#00ba7c; font-size:14px; margin-top:8px"></div>
       </form>
     </div>
   `;
 
-  document.getElementById('profileForm').onsubmit = async (e) => {
+  document.getElementById('settingsForm').onsubmit = async (e) => {
     e.preventDefault();
-    const username = e.target.username.value;
-    const avatar_url = e.target.avatar_url.value;
-    const bio = e.target.bio.value;
     const theme = e.target.theme.value;
     const currentPassword = e.target.currentPassword.value;
     const newPassword = e.target.newPassword.value;
 
-    const payload = { username, avatar_url, bio, theme };
+    const payload = { ...user, theme };
     if (newPassword) {
       payload.currentPassword = currentPassword;
       payload.newPassword = newPassword;
@@ -384,20 +375,135 @@ async function renderProfileEdit(container, token, user) {
       const updatedUser = await fetchAPI('/users/me', {
         method: 'PUT', body: JSON.stringify(payload)
       });
-      localStorage.setItem('user', JSON.stringify(updatedUser)); // update local storage
-      applyTheme(updatedUser.theme); // 即座にテーマを反映
-      document.getElementById('profileError').textContent = '';
-      document.getElementById('profileSuccess').textContent = 'プロフィールを更新しました。';
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      applyTheme(updatedUser.theme);
+      document.getElementById('settingsError').textContent = '';
+      document.getElementById('settingsSuccess').textContent = '設定を更新しました。';
       setTimeout(() => {
-        router(); // レイアウトの再描画（アバター反映のため）
-        window.location.hash = '#/';
+        router();
       }, 1500);
     } catch (err) {
-      document.getElementById('profileSuccess').textContent = '';
-      document.getElementById('profileError').textContent = err.message;
+      document.getElementById('settingsSuccess').textContent = '';
+      document.getElementById('settingsError').textContent = err.message;
     }
   };
 }
+
+// === マイプロフィール (閲覧用) ===
+async function renderMyProfile(container, token, user) {
+  container.innerHTML = `<div style="padding:32px;text-align:center">読み込み中...</div>`;
+  try {
+    // 最新のユーザー情報を取得 (bioやavatar_urlが反映されているか確認するため)
+    const me = await fetchAPI('/users/me');
+    const data = await fetchAPI(`/users/${me.username}`);
+    const { wordbooks } = data;
+
+    container.innerHTML = `
+      <div class="header" style="justify-content:flex-start; gap:24px">
+        <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
+        <h2>${me.username}</h2>
+      </div>
+      
+      <div class="profile-header">
+        <div class="profile-banner"></div>
+        <div class="profile-avatar-container">
+          <div class="avatar">
+            ${me.avatar_url ? `<img src="${me.avatar_url}" alt="">` : me.username.charAt(0).toUpperCase()}
+          </div>
+          <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>
+        </div>
+        <div class="profile-name">${me.username}</div>
+        <div class="profile-handle">@${me.username}</div>
+        <div class="profile-bio">${me.bio || '自己紹介はまだありません。'}</div>
+        <div class="profile-meta">
+          <span><span class="material-icons" style="font-size:16px;vertical-align:text-bottom">calendar_today</span> ${new Date(me.created_at).toLocaleDateString('ja-JP')} に登録</span>
+        </div>
+      </div>
+
+      <div class="header" style="border-bottom:none; margin-top:8px">
+        <h3>作成した単語帳</h3>
+      </div>
+      <div id="myWbList"></div>
+    `;
+
+    const list = document.getElementById('myWbList');
+    if (wordbooks.length === 0) {
+      list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">作成した単語帳はありません。</div>`;
+    } else {
+      wordbooks.forEach(wb => {
+        const d = new Date(wb.created_at).toLocaleDateString('ja-JP');
+        const card = document.createElement('div');
+        card.className = 'feed-card';
+        card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
+        card.innerHTML = `
+          <div class="card-header">
+            <span class="card-author">${me.username}</span>
+            <span>·</span>
+            <span>${d}</span>
+          </div>
+          <h3 class="card-title">${wb.title}</h3>
+          ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+        `;
+        list.appendChild(card);
+      });
+    }
+
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+  }
+}
+
+// === プロフィール編集モーダル ===
+window.openEditProfileModal = async () => {
+  const user = JSON.parse(localStorage.getItem('user'));
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width: 500px">
+      <div class="modal-header">
+        <h2 style="font-size:20px">プロフィールを編集</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <form id="editProfileForm" style="display:flex; flex-direction:column; gap:16px; padding-top:16px">
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">ユーザー名</label>
+          <input type="text" id="username" value="${user.username}" required>
+        </div>
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">アイコン画像のURL</label>
+          <input type="url" id="avatar_url" value="${user.avatar_url || ''}" placeholder="https://example.com/image.png">
+        </div>
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">自己紹介</label>
+          <textarea id="bio" placeholder="自分の情報を入力..." style="height:100px; resize:none">${user.bio || ''}</textarea>
+        </div>
+        <div id="editProfileError" class="error-msg"></div>
+        <div style="display:flex; justify-content:flex-end; margin-top:16px">
+          <button type="submit" class="btn-primary">保存する</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('editProfileForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const username = e.target.username.value;
+    const avatar_url = e.target.avatar_url.value;
+    const bio = e.target.bio.value;
+
+    try {
+      const updatedUser = await fetchAPI('/users/me', {
+        method: 'PUT', body: JSON.stringify({ ...user, username, avatar_url, bio })
+      });
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      overlay.remove();
+      router(); // 再描画
+    } catch (err) {
+      document.getElementById('editProfileError').textContent = err.message;
+    }
+  };
+};
 
 // === 単語帳作成モーダル ===
 window.openCreateModal = () => {
