@@ -187,11 +187,6 @@ function createLayout(user) {
           </div>
         </div>
         
-        <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
-          <h3 style="margin-bottom: 12px">おすすめ</h3>
-          <p style="color: var(--text-secondary); font-size: 14px;">ログインして、自分だけの単語帳を作ろう！</p>
-        </div>
-        
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
           <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
           <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
@@ -262,11 +257,6 @@ function createLayout(user) {
         <div id="popularTagsList" class="popular-tags">
           <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
         </div>
-      </div>
-      
-      <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
-        <h3 style="margin-bottom: 12px">おすすめ</h3>
-        <p style="color: var(--text-secondary); font-size: 14px;">単語帳を作って、みんなと共有しましょう！学習を習慣化する第一歩です。</p>
       </div>
       
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
@@ -481,18 +471,25 @@ async function renderHomeFeed(container, token, user) {
   const q = urlParams.get('q');
   const tag = urlParams.get('tag');
   const sort = urlParams.get('sort') || 'latest';
+  const followingOnly = urlParams.get('following_only') === 'true';
 
   let headerTitle = 'ホーム';
   if (q) headerTitle = `検索結果: ${q}`;
   if (tag) headerTitle = `タグ: #${tag}`;
 
   container.innerHTML = `
-    <div class="header">
+    <div class="header" style="border-bottom:none">
       <h2>${headerTitle}</h2>
       ${(q || tag) ? '<a href="#/" style="font-size:14px">クリア</a>' : ''}
     </div>
+    ${(!q && !tag && user) ? `
+      <div class="home-tabs">
+        <div class="home-tab ${!followingOnly ? 'active' : ''}" onclick="window.location.hash='#/'">おすすめ</div>
+        <div class="home-tab ${followingOnly ? 'active' : ''}" onclick="window.location.hash='#/?following_only=true'">フォロー中</div>
+      </div>
+    ` : ''}
     ${(q || tag) ? `
-    <div style="margin-bottom: 16px;">
+    <div style="margin-bottom: 16px; padding: 0 16px">
       <select id="sortSelect" onchange="changeSort(this.value)" style="padding: 8px; border-radius: 4px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color);">
         <option value="latest" ${sort === 'latest' ? 'selected' : ''}>最新順</option>
         <option value="popular" ${sort === 'popular' ? 'selected' : ''}>閲覧回数順</option>
@@ -508,13 +505,14 @@ async function renderHomeFeed(container, token, user) {
     if (q) params.push(`q=${encodeURIComponent(q)}`);
     if (tag) params.push(`tag=${encodeURIComponent(tag)}`);
     if (sort) params.push(`sort=${encodeURIComponent(sort)}`);
+    if (followingOnly) params.push(`following_only=true`);
     if (params.length > 0) url += '?' + params.join('&');
 
     const wordbooks = await fetchAPI(url);
     const feedList = document.getElementById('feedList');
 
     if (wordbooks.length === 0) {
-      feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">まだ単語帳がありません。最初の単語帳を作成しましょう！</div>`;
+      feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">まだ単語帳がありません。${followingOnly ? '誰かをフォローして、フィードを充実させましょう！' : '最初の単語帳を作成しましょう！'}</div>`;
       return;
     }
 
@@ -673,6 +671,10 @@ async function renderMyProfile(container, token, user) {
         <div class="profile-name">${me.username}</div>
         <div class="profile-handle">@${me.username}</div>
         <div class="profile-bio">${me.bio || '自己紹介はまだありません。'}</div>
+        <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
+          <span style="cursor:pointer" onclick="viewFollowers(${me.id}, '${me.username}')"><strong>${me.followers_count || 0}</strong> フォロワー</span>
+          <span style="cursor:pointer" onclick="viewFollowing(${me.id}, '${me.username}')"><strong>${me.following_count || 0}</strong> フォロー中</span>
+        </div>
         <div class="profile-meta">
           <span><span class="material-icons" style="font-size:16px;vertical-align:text-bottom">calendar_today</span> ${new Date(me.created_at).toLocaleDateString('ja-JP')} に登録</span>
         </div>
@@ -1432,10 +1434,25 @@ async function renderUserProfile(container, username, token) {
           <div class="avatar">
             ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.username.charAt(0).toUpperCase()}
           </div>
+          ${!isMe && me ? `
+            <button class="btn-primary" 
+                    id="followBtn" 
+                    style="background:${user.is_following ? 'transparent' : 'var(--accent-color)'}; 
+                           border:1px solid ${user.is_following ? 'var(--border-color)' : 'var(--accent-color)'}; 
+                           color:${user.is_following ? 'var(--text-primary)' : 'white'}"
+                    onclick="toggleFollow(${user.id}, this)">
+              ${user.is_following ? 'フォロー中' : 'フォローする'}
+            </button>
+          ` : ''}
+          ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
         </div>
         <div class="profile-name">${user.username}</div>
         <div class="profile-handle">@${user.username}</div>
         <div class="profile-bio">${user.bio || '自己紹介はまだありません。'}</div>
+        <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
+          <span style="cursor:pointer" onclick="viewFollowers(${user.id}, '${user.username}')"><strong>${user.followers_count || 0}</strong> フォロワー</span>
+          <span style="cursor:pointer" onclick="viewFollowing(${user.id}, '${user.username}')"><strong>${user.following_count || 0}</strong> フォロー中</span>
+        </div>
         <div class="profile-meta">
           <span><span class="material-icons" style="font-size:16px;vertical-align:text-bottom">calendar_today</span> ${new Date(user.created_at).toLocaleDateString('ja-JP')} に登録</span>
         </div>
@@ -2201,3 +2218,85 @@ function renderPrivacyPolicy(container) {
     </div>
   `;
 }
+
+// === フォロー機能 ===
+window.toggleFollow = async (userId, btn) => {
+  try {
+    const userSnapshot = JSON.parse(localStorage.getItem('user'));
+    if (!userSnapshot) {
+      window.location.hash = '#/login';
+      return;
+    }
+
+    const isFollowing = btn.textContent.trim() === 'フォロー中';
+    if (isFollowing) {
+      await fetchAPI(`/follows/${userId}`, { method: 'DELETE' });
+      btn.textContent = 'フォローする';
+      btn.style.background = 'var(--accent-color)';
+      btn.style.color = 'white';
+      btn.style.borderColor = 'var(--accent-color)';
+    } else {
+      await fetchAPI(`/follows/${userId}`, { method: 'POST' });
+      btn.textContent = 'フォロー中';
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-primary)';
+      btn.style.borderColor = 'var(--border-color)';
+    }
+    // カウントの更新のためにページを再取得
+    const hash = window.location.hash;
+    if (hash.startsWith('#/user/')) {
+      const username = hash.split('/')[2];
+      await renderUserProfile(document.querySelector('.main'), username, localStorage.getItem('token'));
+    } else if (hash === '#/profile') {
+      await renderMyProfile(document.querySelector('.main'), localStorage.getItem('token'), userSnapshot);
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+window.viewFollowers = async (userId, username) => {
+  try {
+    const followers = await fetchAPI(`/follows/${userId}/followers`);
+    showUserListModal(`@${username} のフォロワー`, followers);
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+window.viewFollowing = async (userId, username) => {
+  try {
+    const following = await fetchAPI(`/follows/${userId}/following`);
+    showUserListModal(`@${username} がフォロー中`, following);
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+window.showUserListModal = (title, users) => {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width: 500px">
+      <div class="modal-header">
+        <h2 style="font-size:20px">${title}</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <div class="user-list" style="max-height: 400px; overflow-y: auto; margin-top: 16px;">
+        ${users.length === 0 ? '<div style="padding:16px; text-align:center; color:var(--text-secondary)">ユーザーがいません。</div>' : users.map(u => `
+          <div class="user-list-item" onclick="window.location.hash='#/user/${u.username}'; this.closest('.modal-overlay').remove()" style="display:flex; align-items:center; gap:12px; padding:12px; cursor:pointer; border-bottom:1px solid var(--border-color)">
+            <div class="avatar" style="width:40px; height:40px">
+              ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : u.username.charAt(0).toUpperCase()}
+            </div>
+            <div style="flex:1">
+              <div style="font-weight:bold">${u.username}</div>
+              <div style="font-size:12px; color:var(--text-secondary)">@${u.username}</div>
+              <div style="font-size:13px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${u.bio || ''}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+};

@@ -12,7 +12,10 @@ const router = express.Router();
 router.get('/me', authenticate, async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT id, username, avatar_url, bio, theme, created_at FROM users WHERE id = $1',
+            `SELECT id, username, avatar_url, bio, theme, created_at,
+                    (SELECT COUNT(*) FROM follows WHERE following_id = users.id) AS followers_count,
+                    (SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following_count
+             FROM users WHERE id = $1`,
             [req.user.id]
         );
         if (!result.rows[0]) return res.status(404).json({ error: 'ユーザーが見つかりません' });
@@ -79,9 +82,24 @@ router.put('/me', authenticate, async (req, res) => {
  */
 router.get('/:username', async (req, res) => {
     try {
+        // トークンがある場合はユーザーIDを取得
+        let currentUserId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const jwt = require('jsonwebtoken');
+            try {
+                const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'tangosns_secret_key');
+                currentUserId = decoded.id;
+            } catch (e) { }
+        }
+
         const userResult = await db.query(
-            'SELECT id, username, avatar_url, bio, created_at FROM users WHERE username = $1',
-            [req.params.username]
+            `SELECT id, username, avatar_url, bio, created_at,
+                    (SELECT COUNT(*) FROM follows WHERE following_id = users.id) AS followers_count,
+                    (SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following_count,
+                    EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND following_id = users.id) AS is_following
+             FROM users WHERE username = $1`,
+            [req.params.username, currentUserId]
         );
         const user = userResult.rows[0];
         if (!user) return res.status(404).json({ error: 'ユーザーが見つかりません' });

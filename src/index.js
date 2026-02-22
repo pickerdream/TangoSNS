@@ -54,6 +54,9 @@ app.use('/api/tags', tagRoutes);
 const trendingRoutes = require('./routes/trending');
 app.use('/api/trending', trendingRoutes);
 
+const followRoutes = require('./routes/follows');
+app.use('/api/follows', followRoutes);
+
 // 404 ハンドラ
 app.use((req, res) => {
   res.status(404).json({ error: 'エンドポイントが見つかりません' });

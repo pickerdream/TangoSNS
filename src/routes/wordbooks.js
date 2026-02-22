@@ -11,7 +11,7 @@ const { authenticate } = require('../middleware/auth');
  */
 router.get('/', async (req, res) => {
     try {
-        const { username, q, tag, sort } = req.query;
+        const { username, q, tag, sort, following_only } = req.query;
 
         // ログイン中のユーザーIDを取得（認証は任意だが、完了マーク表示に必要）
         let currentUserId = null;
@@ -52,6 +52,9 @@ router.get('/', async (req, res) => {
         if (tag) {
             params.push(tag);
             conditions.push(`EXISTS(SELECT 1 FROM wordbook_tags wt JOIN tags t ON t.id = wt.tag_id WHERE wt.wordbook_id = w.id AND t.name = $${params.length})`);
+        }
+        if (following_only === 'true' && currentUserId) {
+            conditions.push(`EXISTS(SELECT 1 FROM follows f WHERE f.following_id = w.user_id AND f.follower_id = $1)`);
         }
 
         if (conditions.length > 0) {
@@ -155,7 +158,7 @@ router.get('/:id', async (req, res) => {
             if (lastViewResult.rows[0]) {
                 const lastViewTime = new Date(lastViewResult.rows[0].viewed_at);
                 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-                
+
                 if (lastViewTime > oneHourAgo) {
                     // 1時間以内なのでカウントしない
                     shouldCountView = false;
@@ -172,7 +175,7 @@ router.get('/:id', async (req, res) => {
             if (lastGuestViewResult.rows[0]) {
                 const lastViewTime = new Date(lastGuestViewResult.rows[0].viewed_at);
                 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-                
+
                 if (lastViewTime > oneHourAgo) {
                     // 1時間以内なのでカウントしない
                     shouldCountView = false;

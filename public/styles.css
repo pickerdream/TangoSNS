@@ -986,3 +986,54 @@ textarea:focus {
     font-size: 13px;
   }
 }
+
+/* ホームタブ */
+.home-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.home-tab {
+  flex: 1;
+  text-align: center;
+  padding: 16px;
+  cursor: pointer;
+  font-weight: bold;
+  color: var(--text-secondary);
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.home-tab:hover {
+  background-color: var(--bg-hover);
+}
+
+.home-tab.active {
+  color: var(--text-primary);
+}
+
+.home-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 4px;
+  background-color: var(--accent-color);
+  border-radius: 2px;
+}
+
+/* ユーザーリスト (モーダル) */
+.user-list-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.profile-stats span:hover {
+  text-decoration: underline;
+}
+
+.profile-stats strong {
+  color: var(--text-primary);
+}

@@ -1,14 +1,14 @@
 /**
  * @type {import('node-pg-migrate').ColumnDefinitions | undefined}
  */
-export const shorthands = undefined;
+exports.shorthands = undefined;
 
 /**
  * @param pgm {import('node-pg-migrate').MigrationBuilder}
  * @param run {() => void | undefined}
  * @returns {Promise<void> | void}
  */
-export const up = (pgm) => {
+exports.up = (pgm) => {
     pgm.createTable('notifications', {
         id: 'id',
         user_id: { type: 'integer', notNull: true, references: '"users"', onDelete: 'cascade' },
@@ -21,6 +21,6 @@ export const up = (pgm) => {
     pgm.createIndex('notifications', 'user_id');
 };
 
-export const down = (pgm) => {
+exports.down = (pgm) => {
     pgm.dropTable('notifications');
 };
