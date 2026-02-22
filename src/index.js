@@ -42,6 +42,9 @@ app.use('/api/study', studyRoutes);
 const completionRoutes = require('./routes/completions');
 app.use('/api/completions', completionRoutes);
 
+const notificationRoutes = require('./routes/notifications');
+app.use('/api/notifications', notificationRoutes);
+
 // 404 ハンドラ
 app.use((req, res) => {
   res.status(404).json({ error: 'エンドポイントが見つかりません' });

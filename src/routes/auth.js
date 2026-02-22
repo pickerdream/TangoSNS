@@ -29,7 +29,10 @@ router.post('/register', async (req, res) => {
         );
         const user = result.rows[0];
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-        res.status(201).json({ user, token });
+        res.status(201).json({
+            user: { ...user, bio: null, avatar_url: null, theme: 'system' },
+            token
+        });
     } catch (err) {
         if (err.code === '23505') {
             return res.status(409).json({ error: 'このユーザー名は既に使用されています' });
@@ -65,7 +68,14 @@ router.post('/login', async (req, res) => {
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
         res.json({
-            user: { id: user.id, username: user.username, created_at: user.created_at },
+            user: {
+                id: user.id,
+                username: user.username,
+                avatar_url: user.avatar_url,
+                bio: user.bio,
+                theme: user.theme,
+                created_at: user.created_at
+            },
             token,
         });
     } catch (err) {

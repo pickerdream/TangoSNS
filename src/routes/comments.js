@@ -54,6 +54,23 @@ router.post('/', authenticate, async (req, res) => {
             [req.user.id, id, comment.trim()]
         );
         const row = result.rows[0];
+
+        // 単語帳の所有者が自分以外なら通知を作成
+        const ownerResult = await db.query('SELECT user_id, title FROM wordbooks WHERE id = $1', [id]);
+        const owner = ownerResult.rows[0];
+        if (owner && owner.user_id !== req.user.id) {
+            await db.query(
+                `INSERT INTO notifications (user_id, type, message, link)
+                 VALUES ($1, $2, $3, $4)`,
+                [
+                    owner.user_id,
+                    'comment',
+                    `@${req.user.username}さんが単語帳「${owner.title}」にコメントしました`,
+                    `#/wordbook/${id}`
+                ]
+            );
+        }
+
         res.status(201).json({
             id: row.id,
             comment: row.comment,

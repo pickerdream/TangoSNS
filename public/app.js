@@ -43,6 +43,10 @@ const router = async () => {
     appDiv.appendChild(layout);
     const username = hash.split('/')[2];
     await renderUserProfile(layout.querySelector('.main'), username, token);
+  } else if (hash === '#/notifications') {
+    const layout = createLayout(user);
+    appDiv.appendChild(layout);
+    await renderNotifications(layout.querySelector('.main'));
   }
 };
 
@@ -81,7 +85,25 @@ function applyTheme(theme) {
   if (user && user.theme) {
     applyTheme(user.theme);
   }
+  // 未読通知バッジの更新（定期実行または初回）
+  if (user) updateUnreadBadge();
 })();
+
+async function updateUnreadBadge() {
+  try {
+    const notifications = await fetchAPI('/notifications');
+    const unreadCount = notifications.filter(n => !n.is_read).length;
+    const badge = document.getElementById('unreadBadge');
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch (e) { }
+}
 
 // === レイアウト (サイドバー含む) ===
 function createLayout(user) {
@@ -96,6 +118,10 @@ function createLayout(user) {
       <div class="nav-links">
         <a href="#/" class="nav-link"><span class="material-icons">home</span> ホーム</a>
         <a href="#/history" class="nav-link"><span class="material-icons">history</span> 学習履歴</a>
+        <a href="#/notifications" class="nav-link" id="navNotifications">
+          <span class="material-icons">notifications</span> 通知
+          <span class="badge-unread" id="unreadBadge" style="display:none"></span>
+        </a>
         <a href="#/profile" class="nav-link"><span class="material-icons">person</span> プロフィール</a>
       </div>
       <button class="btn-primary btn-wide sidebar-btn" onclick="openCreateModal()">単語帳を作成</button>
@@ -844,5 +870,62 @@ async function renderUserProfile(container, username, token) {
 
   } catch (err) {
     container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+  }
+}
+
+// === 通知画面 ===
+async function renderNotifications(container) {
+  try {
+    container.innerHTML = `
+      <div class="header">
+        <h2>通知</h2>
+        <button class="btn-secondary" onclick="markAllNotificationsAsRead()">すべて既読にする</button>
+      </div>
+      <div id="notificationsList" class="notifications-list">
+        <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
+      </div>
+    `;
+
+    const list = document.getElementById('notificationsList');
+    const notifications = await fetchAPI('/notifications');
+
+    if (notifications.length === 0) {
+      list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">通知はありません。</div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    notifications.forEach(n => {
+      const d = new Date(n.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const item = document.createElement('div');
+      item.className = `notification-item ${n.is_read ? '' : 'unread'}`;
+      item.onclick = async () => {
+        if (!n.is_read) {
+          await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+          updateUnreadBadge();
+        }
+        if (n.link) window.location.hash = n.link;
+      };
+      item.innerHTML = `
+        <div class="notification-content">
+          <div class="notification-message">${n.message}</div>
+          <div class="notification-date">${d}</div>
+        </div>
+        ${n.is_read ? '' : '<div class="notification-dot"></div>'}
+      `;
+      list.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+  }
+}
+
+async function markAllNotificationsAsRead() {
+  try {
+    await fetchAPI('/notifications/read-all', { method: 'PUT' });
+    updateUnreadBadge();
+    router(); // 再描画
+  } catch (e) {
+    alert('エラーが発生しました');
   }
 }
