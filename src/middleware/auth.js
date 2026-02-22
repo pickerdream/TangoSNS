@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const db = require('../db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tangosns_secret_key';
 
@@ -22,4 +23,21 @@ const authenticate = (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, JWT_SECRET };
+/**
+ * 管理者認証ミドルウェア
+ * authenticateの後に使用し、管理者権限を確認する
+ */
+const requireAdmin = async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT is_admin FROM users WHERE id = $1', [req.user.id]);
+    if (!result.rows[0] || !result.rows[0].is_admin) {
+      return res.status(403).json({ error: '管理者権限が必要です' });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+};
+
+module.exports = { authenticate, requireAdmin, JWT_SECRET };

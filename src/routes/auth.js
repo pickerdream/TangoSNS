@@ -21,16 +21,27 @@ router.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'パスワードは6文字以上にしてください' });
     }
 
+    // IPアドレスとUser-Agentを取得
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const userAgent = req.headers['user-agent'] || null;
+
     try {
         const hashed = await bcrypt.hash(password, 10);
         const result = await db.query(
-            'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username, created_at',
-            [username, hashed]
+            'INSERT INTO users (username, password, registration_ip) VALUES ($1, $2, $3) RETURNING id, username, created_at, is_admin',
+            [username, hashed, ip]
         );
         const user = result.rows[0];
+
+        // IPアクティビティログに記録
+        await db.query(
+            'INSERT INTO user_ip_logs (user_id, ip_address, action, user_agent) VALUES ($1, $2, $3, $4)',
+            [user.id, ip, 'register', userAgent]
+        );
+
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
         res.status(201).json({
-            user: { ...user, bio: null, avatar_url: null, theme: 'system' },
+            user: { ...user, bio: null, avatar_url: null, theme: 'system', is_admin: user.is_admin },
             token
         });
     } catch (err) {
@@ -61,10 +72,25 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'ユーザー名またはパスワードが正しくありません' });
         }
 
+        // BANチェック
+        if (user.is_banned) {
+            return res.status(403).json({ error: 'このアカウントはBANされています。理由: ' + (user.ban_reason || '規約違反') });
+        }
+
         const valid = await bcrypt.compare(password, user.password);
         if (!valid) {
             return res.status(401).json({ error: 'ユーザー名またはパスワードが正しくありません' });
         }
+
+        // IPアドレスとUser-Agentを取得
+        const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+        const userAgent = req.headers['user-agent'] || null;
+
+        // IPアクティビティログに記録
+        await db.query(
+            'INSERT INTO user_ip_logs (user_id, ip_address, action, user_agent) VALUES ($1, $2, $3, $4)',
+            [user.id, ip, 'login', userAgent]
+        );
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
         res.json({
@@ -74,7 +100,8 @@ router.post('/login', async (req, res) => {
                 avatar_url: user.avatar_url,
                 bio: user.bio,
                 theme: user.theme,
-                created_at: user.created_at
+                created_at: user.created_at,
+                is_admin: user.is_admin
             },
             token,
         });

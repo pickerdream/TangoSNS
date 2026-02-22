@@ -45,6 +45,15 @@ app.use('/api/completions', completionRoutes);
 const notificationRoutes = require('./routes/notifications');
 app.use('/api/notifications', notificationRoutes);
 
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
+
+const tagRoutes = require('./routes/tags');
+app.use('/api/tags', tagRoutes);
+
+const trendingRoutes = require('./routes/trending');
+app.use('/api/trending', trendingRoutes);
+
 // 404 ハンドラ
 app.use((req, res) => {
   res.status(404).json({ error: 'エンドポイントが見つかりません' });

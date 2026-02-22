@@ -21,7 +21,7 @@ const router = async () => {
     renderLogin(appDiv);
   } else if (hash === '#/register') {
     renderRegister(appDiv);
-  } else if (hash === '#/') {
+  } else if (hash === '#/' || hash.startsWith('#/?')) {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderHomeFeed(layout.querySelector('.main'), token);
@@ -51,6 +51,14 @@ const router = async () => {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderNotifications(layout.querySelector('.main'));
+  } else if (hash === '#/admin') {
+    if (!user || !user.is_admin) {
+      window.location.hash = '#/';
+      return;
+    }
+    const layout = createLayout(user);
+    appDiv.appendChild(layout);
+    await renderAdminDashboard(layout.querySelector('.main'));
   }
 };
 
@@ -128,6 +136,7 @@ function createLayout(user) {
         </a>
         <a href="#/profile" class="nav-link"><span class="material-icons">person</span> プロフィール</a>
         <a href="#/settings" class="nav-link"><span class="material-icons">settings</span> 設定</a>
+        ${user.is_admin ? '<a href="#/admin" class="nav-link" style="color: #f59e0b"><span class="material-icons">admin_panel_settings</span> 管理者</a>' : ''}
       </div>
       <button class="btn-primary btn-wide sidebar-btn" onclick="openCreateModal()">単語帳を作成</button>
       
@@ -151,12 +160,75 @@ function createLayout(user) {
       <input type="text" id="searchInput" class="search-box" placeholder="単語帳を検索..." onkeydown="handleSearch(event)">
       
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
+        <h3 style="margin-bottom: 12px">急上昇</h3>
+        <div id="trendingWordsList" class="trending-words">
+          <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+        </div>
+      </div>
+      
+      <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
+        <h3 style="margin-bottom: 12px">人気のタグ</h3>
+        <div id="popularTagsList" class="popular-tags">
+          <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+        </div>
+      </div>
+      
+      <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
         <h3 style="margin-bottom: 12px">おすすめ</h3>
         <p style="color: var(--text-secondary); font-size: 14px;">単語帳を作って、みんなと共有しましょう！学習を習慣化する第一歩です。</p>
       </div>
     </div>
   `;
+  
+  // 人気タグを非同期で取得
+  loadPopularTags();
+  loadTrendingWords();
+  
   return container;
+}
+
+async function loadPopularTags() {
+  try {
+    const tags = await fetchAPI('/tags/popular');
+    const container = document.getElementById('popularTagsList');
+    if (!container) return;
+    
+    if (tags.length === 0) {
+      container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">タグはまだありません</span>';
+      return;
+    }
+    
+    container.innerHTML = tags.map(t => 
+      `<a href="#/?tag=${encodeURIComponent(t.name)}" class="tag-chip">#${t.name}</a>`
+    ).join('');
+  } catch (e) {
+    const container = document.getElementById('popularTagsList');
+    if (container) container.innerHTML = '';
+  }
+}
+
+async function loadTrendingWords() {
+  try {
+    const words = await fetchAPI('/trending/words');
+    const container = document.getElementById('trendingWordsList');
+    if (!container) return;
+    
+    if (words.length === 0) {
+      container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">まだありません</span>';
+      return;
+    }
+    
+    container.innerHTML = words.map(w => 
+      `<div class="trending-word" onclick="window.location.hash='#/wordbook/${w.wordbook_id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
+        <div style="font-weight: 600; font-size: 14px;">${w.word}</div>
+        <div style="color: var(--text-secondary); font-size: 12px;">${w.meaning}</div>
+        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${w.study_count}回 · ${w.username}</div>
+      </div>`
+    ).join('');
+  } catch (e) {
+    const container = document.getElementById('trendingWordsList');
+    if (container) container.innerHTML = '<span style="color: var(--text-secondary); font-size: 14px;">読み込みエラー</span>';
+  }
 }
 
 window.logout = () => {
@@ -268,18 +340,37 @@ function renderRegister(container) {
 async function renderHomeFeed(container) {
   const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
   const q = urlParams.get('q');
+  const tag = urlParams.get('tag');
+  const sort = urlParams.get('sort') || 'latest';
 
-  let headerTitle = q ? `検索結果: ${q}` : 'ホーム';
+  let headerTitle = 'ホーム';
+  if (q) headerTitle = `検索結果: ${q}`;
+  if (tag) headerTitle = `タグ: #${tag}`;
+
   container.innerHTML = `
     <div class="header">
       <h2>${headerTitle}</h2>
-      ${q ? '<a href="#/" style="font-size:14px">クリア</a>' : ''}
+      ${(q || tag) ? '<a href="#/" style="font-size:14px">クリア</a>' : ''}
     </div>
+    ${(q || tag) ? `
+    <div style="margin-bottom: 16px;">
+      <select id="sortSelect" onchange="changeSort(this.value)" style="padding: 8px; border-radius: 4px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color);">
+        <option value="latest" ${sort === 'latest' ? 'selected' : ''}>最新順</option>
+        <option value="popular" ${sort === 'popular' ? 'selected' : ''}>閲覧回数順</option>
+      </select>
+    </div>
+    ` : ''}
     <div id="feedList"></div>
   `;
 
   try {
-    const url = q ? `/wordbooks?q=${encodeURIComponent(q)}` : '/wordbooks';
+    let url = '/wordbooks';
+    const params = [];
+    if (q) params.push(`q=${encodeURIComponent(q)}`);
+    if (tag) params.push(`tag=${encodeURIComponent(tag)}`);
+    if (sort) params.push(`sort=${encodeURIComponent(sort)}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
     const wordbooks = await fetchAPI(url);
     const feedList = document.getElementById('feedList');
 
@@ -301,6 +392,14 @@ async function renderHomeFeed(container) {
         </div>
       ` : '';
 
+      // タグ表示
+      const tags = wb.tags || [];
+      const tagsHtml = tags.length > 0 ? `
+        <div class="card-tags" onclick="event.stopPropagation()">
+          ${tags.map(t => `<a href="#/?tag=${encodeURIComponent(t.name)}" class="tag-chip">#${t.name}</a>`).join('')}
+        </div>
+      ` : '';
+
       card.innerHTML = `
         <div class="card-header">
           <div class="avatar" style="width:24px;height:24px;font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">
@@ -313,6 +412,7 @@ async function renderHomeFeed(container) {
         </div>
         <h3 class="card-title">${wb.title}</h3>
         ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+        ${tagsHtml}
       `;
       feedList.appendChild(card);
     });
@@ -506,7 +606,13 @@ window.openEditProfileModal = async () => {
 };
 
 // === 単語帳作成モーダル ===
-window.openCreateModal = () => {
+window.openCreateModal = async () => {
+  // 人気タグを取得
+  let popularTags = [];
+  try {
+    popularTags = await fetchAPI('/tags/popular');
+  } catch (e) { }
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -517,20 +623,45 @@ window.openCreateModal = () => {
       </div>
       <input type="text" id="wb-title" placeholder="単語帳のタイトル" style="font-size:24px; font-weight:bold; border:none; margin-bottom:16px; background:transparent">
       <textarea id="wb-desc" placeholder="この単語帳の説明を入力..." style="border:none; height:100px; resize:none; font-size:16px; background:transparent"></textarea>
+      
+      <div style="margin-top:16px">
+        <label style="font-size:14px;color:var(--text-secondary)">タグ（カンマ区切りで入力）</label>
+        <input type="text" id="wb-tags" placeholder="例: 英語, TOEIC, 初心者" style="margin-top:8px">
+        ${popularTags.length > 0 ? `
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+            ${popularTags.map(t => `
+              <button type="button" class="tag-suggestion" onclick="addTagSuggestion('${t.name}')">${t.name}</button>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+      
       <div id="createError" class="error-msg"></div>
     </div>
   `;
   document.body.appendChild(overlay);
 };
 
+window.addTagSuggestion = (tagName) => {
+  const input = document.getElementById('wb-tags');
+  if (!input) return;
+  const current = input.value.split(',').map(t => t.trim()).filter(t => t);
+  if (!current.includes(tagName)) {
+    current.push(tagName);
+    input.value = current.join(', ');
+  }
+};
+
 window.submitWordbook = async (btn) => {
   const container = btn.closest('.modal-overlay');
   const title = container.querySelector('#wb-title').value;
   const description = container.querySelector('#wb-desc').value;
+  const tagsInput = container.querySelector('#wb-tags').value;
+  const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
 
   try {
     const wb = await fetchAPI('/wordbooks', {
-      method: 'POST', body: JSON.stringify({ title, description })
+      method: 'POST', body: JSON.stringify({ title, description, tags })
     });
     container.remove();
     window.location.hash = `#/wordbook/${wb.id}`;
@@ -563,11 +694,22 @@ async function renderWordbookDetail(container, wbId, token, user) {
             <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${wb.username}'">作成者: @${wb.username}</p>
           </div>
         </div>
+        ${wb.tags && wb.tags.length > 0 ? `
+          <div class="card-tags" style="margin-bottom:12px">
+            ${wb.tags.map(t => `<a href="#/?tag=${encodeURIComponent(t.name)}" class="tag-chip">#${t.name}</a>`).join('')}
+          </div>
+        ` : ''}
         <p style="margin-bottom:16px; white-space:pre-wrap">${wb.description || ''}</p>
         ${wb.bio ? `<div style="padding:8px 12px; background:var(--bg-secondary); border-radius:8px; margin-bottom:16px; font-size:13px; color:var(--text-secondary)">
           <div style="font-weight:bold; margin-bottom:4px">作成者の自己紹介:</div>
           <div>${wb.bio}</div>
         </div>` : ''}
+        <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap; color:var(--text-secondary); font-size:14px;">
+          <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">library_books</span>${wb.word_count || 0} 単語</span>
+          <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">comment</span>${wb.comment_count || 0} コメント</span>
+          <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0} 閲覧</span>
+          <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">school</span>${wb.study_count || 0} 学習</span>
+        </div>
         <div style="display:flex; gap:12px; margin-bottom:8px; align-items:center; flex-wrap:wrap">
           ${words.length > 0 ? `<button class="btn-primary" onclick='startStudy(${wb.id}, ${JSON.stringify(words).replace(/'/g, "&#39;")})'><span class="material-icons" style="vertical-align:middle;margin-right:8px">school</span>学習を始める</button>` : ''}
           <button class="btn-primary" style="background:transparent; border:1px solid var(--accent-color); color:var(--accent-color)" onclick="startMistakeStudy(${wb.id})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">replay</span>間違えた単語を復習</button>
@@ -577,7 +719,12 @@ async function renderWordbookDetail(container, wbId, token, user) {
             ${wb.is_completed ? '完了済み' : '完了にする'}
           </button>
 
-          ${isOwner ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color); margin-left:auto" onclick="deleteWordbook(${wb.id})">削除</button>` : ''}
+          ${isOwner ? `
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); margin-left:auto" onclick='openEditWordbookModal(${JSON.stringify(wb).replace(/'/g, "&#39;")})'>
+              <span class="material-icons" style="vertical-align:middle;margin-right:4px;font-size:18px">edit</span>編集
+            </button>
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color)" onclick="deleteWordbook(${wb.id})">削除</button>
+          ` : ''}
         </div>
       </div>
       
@@ -623,12 +770,17 @@ async function renderWordbookDetail(container, wbId, token, user) {
     comments.forEach(c => {
       const isCmdOwner = c.user_id === user.id;
       cl.innerHTML += `
-        <div style="padding:16px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between">
-          <div>
-            <span style="font-weight:bold">${c.username}</span>
-            <p style="margin-top:4px">${c.comment}</p>
+        <div style="padding:16px; border-bottom:1px solid var(--border-color); display:flex; gap:12px; align-items:flex-start">
+          <div class="avatar" style="width:32px; height:32px; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${c.username}'">
+            ${c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : c.username.charAt(0).toUpperCase()}
           </div>
-          ${isCmdOwner ? `<button class="delete-btn" onclick="deleteComment(${wbId}, ${c.id})"><span class="material-icons">delete</span></button>` : ''}
+          <div style="flex:1">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${c.username}'">${c.username}</span>
+              ${isCmdOwner ? `<button class="delete-btn" onclick="deleteComment(${wbId}, ${c.id})"><span class="material-icons" style="font-size:18px">delete</span></button>` : ''}
+            </div>
+            <p style="margin-top:4px; white-space:pre-wrap">${c.comment}</p>
+          </div>
         </div>
       `;
     });
@@ -693,9 +845,78 @@ window.deleteComment = async (wbId, cId) => {
   if (!confirm('削除しますか？')) return;
   try {
     await fetchAPI(`/wordbooks/${wbId}/comments/${cId}`, { method: 'DELETE' });
-    router(); // 再描画
+    router();
   } catch (err) { alert(err.message); }
 };
+
+// === 単語帳編集モーダル ===
+window.openEditWordbookModal = async (wb) => {
+  // 人気タグを取得
+  let popularTags = [];
+  try {
+    popularTags = await fetchAPI('/tags/popular');
+  } catch (e) { }
+
+  const currentTags = (wb.tags || []).map(t => t.name).join(', ');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+        <button class="btn-primary" onclick="submitEditWordbook(this, ${wb.id})">保存する</button>
+      </div>
+      <input type="text" id="edit-wb-title" value="${wb.title.replace(/"/g, '&quot;')}" placeholder="単語帳のタイトル" style="font-size:24px; font-weight:bold; border:none; margin-bottom:16px; background:transparent">
+      <textarea id="edit-wb-desc" placeholder="この単語帳の説明を入力..." style="border:none; height:100px; resize:none; font-size:16px; background:transparent">${wb.description || ''}</textarea>
+      
+      <div style="margin-top:16px">
+        <label style="font-size:14px;color:var(--text-secondary)">タグ（カンマ区切りで入力）</label>
+        <input type="text" id="edit-wb-tags" value="${currentTags}" placeholder="例: 英語, TOEIC, 初心者" style="margin-top:8px">
+        ${popularTags.length > 0 ? `
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+            ${popularTags.map(t => `
+              <button type="button" class="tag-suggestion" onclick="addEditTagSuggestion('${t.name}')">${t.name}</button>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+      
+      <div id="editError" class="error-msg"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+};
+
+window.addEditTagSuggestion = (tagName) => {
+  const input = document.getElementById('edit-wb-tags');
+  if (!input) return;
+  const current = input.value.split(',').map(t => t.trim()).filter(t => t);
+  if (!current.includes(tagName)) {
+    current.push(tagName);
+    input.value = current.join(', ');
+  }
+};
+
+window.submitEditWordbook = async (btn, wbId) => {
+  const container = btn.closest('.modal-overlay');
+  const title = container.querySelector('#edit-wb-title').value;
+  const description = container.querySelector('#edit-wb-desc').value;
+  const tagsInput = container.querySelector('#edit-wb-tags').value;
+  const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
+
+  try {
+    await fetchAPI(`/wordbooks/${wbId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title, description, tags })
+    });
+    container.remove();
+    router();
+  } catch (err) {
+    container.querySelector('#editError').textContent = err.message;
+  }
+};
+
 // === 学習履歴画面 ===
 async function renderHistory(container) {
   container.innerHTML = `
@@ -816,14 +1037,14 @@ window.startStudy = (wbId, words, isReview = false) => {
   const renderCard = () => {
     // 全問終了チェック
     if (currentIndex >= currentWords.length) {
-      // APIへ結果送信 (非同期で投げておく)
-      const wrongIds = roundWrongs.map(w => w.id || w.word_id);
-      fetchAPI('/study/finish', {
-        method: 'POST',
-        body: JSON.stringify({ wordbookId: wbId, wrongWordIds: wrongIds })
-      }).catch(err => console.error('学習記録の保存に失敗:', err));
-
       if (roundWrongs.length === 0) {
+        // 完全クリアの場合のみ学習完了として記録
+        const wrongIds = roundWrongs.map(w => w.id || w.word_id);
+        fetchAPI('/study/finish', {
+          method: 'POST',
+          body: JSON.stringify({ wordbookId: wbId, wrongWordIds: wrongIds })
+        }).catch(err => console.error('学習記録の保存に失敗:', err));
+
         // 完全クリア
         modal.innerHTML = `
             <div class="study-header">
@@ -924,11 +1145,34 @@ async function renderUserProfile(container, username, token) {
   try {
     const data = await fetchAPI(`/users/${username}`);
     const { user, wordbooks } = data;
+    const me = JSON.parse(localStorage.getItem('user') || '{}');
+    const isAdmin = me.is_admin === true;
+    const isMe = me.id === user.id;
+
+    const adminMenu = (isAdmin && !isMe) ? `
+      <div class="admin-dropdown">
+        <button class="btn-sm" onclick="toggleAdminMenu(event)" title="管理者メニュー">
+          <span class="material-icons">more_vert</span>
+        </button>
+        <div class="admin-dropdown-menu" id="adminDropdownMenu">
+          <button onclick="openWarnModal(${user.id}, '${user.username}')">
+            <span class="material-icons">warning</span> 警告を送信
+          </button>
+          <button onclick="openBanModal(${user.id}, '${user.username}')">
+            <span class="material-icons">block</span> BANする
+          </button>
+          <button onclick="deleteUser(${user.id}, '${user.username}')" style="color:#dc2626">
+            <span class="material-icons">delete</span> ユーザーを削除
+          </button>
+        </div>
+      </div>
+    ` : '';
 
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
         <h2>${user.username}</h2>
+        <div style="margin-left:auto">${adminMenu}</div>
       </div>
       
       <div class="profile-header">
@@ -1005,20 +1249,41 @@ async function renderNotifications(container) {
       const d = new Date(n.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const item = document.createElement('div');
       item.className = `notification-item ${n.is_read ? '' : 'unread'}`;
-      item.onclick = async () => {
-        if (!n.is_read) {
-          await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
-          updateUnreadBadge();
-        }
-        if (n.link) window.location.hash = n.link;
-      };
-      item.innerHTML = `
-        <div class="notification-content">
-          <div class="notification-message">${n.message}</div>
-          <div class="notification-date">${d}</div>
-        </div>
-        ${n.is_read ? '' : '<div class="notification-dot"></div>'}
-      `;
+      
+      if (n.type === 'warning') {
+        // 警告通知は確認が必要
+        item.onclick = async () => {
+          if (confirm('この警告を確認しましたか？')) {
+            await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+            updateUnreadBadge();
+            router();
+          }
+        };
+        item.innerHTML = `
+          <div class="notification-content">
+            <div class="notification-message" style="color: var(--error-color); font-weight: bold;">${n.message}</div>
+            <div class="notification-date">${d}</div>
+            <div style="margin-top: 8px; color: var(--text-secondary); font-size: 12px;">確認するまで通知に残ります</div>
+          </div>
+          <div class="notification-dot" style="background: var(--error-color);"></div>
+        `;
+      } else {
+        item.onclick = async () => {
+          if (!n.is_read) {
+            await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+            updateUnreadBadge();
+          }
+          if (n.link) window.location.hash = n.link;
+        };
+        item.innerHTML = `
+          <div class="notification-content">
+            <div class="notification-message">${n.message}</div>
+            <div class="notification-date">${d}</div>
+          </div>
+          ${n.is_read ? '' : '<div class="notification-dot"></div>'}
+        `;
+      }
+      
       list.appendChild(item);
     });
   } catch (err) {
@@ -1030,8 +1295,399 @@ async function markAllNotificationsAsRead() {
   try {
     await fetchAPI('/notifications/read-all', { method: 'PUT' });
     updateUnreadBadge();
-    router(); // 再描画
+    router();
   } catch (e) {
     alert('エラーが発生しました');
   }
 }
+
+// === 管理者ダッシュボード ===
+async function renderAdminDashboard(container) {
+  container.innerHTML = `
+    <div class="header">
+      <h2><span class="material-icons" style="vertical-align:middle;margin-right:8px;color:#f59e0b">admin_panel_settings</span>管理者ダッシュボード</h2>
+    </div>
+    <div style="padding:16px">
+      <div id="adminStats" class="admin-stats-grid">
+        <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
+      </div>
+      <div style="margin-top:24px">
+        <h3 style="margin-bottom:16px">ユーザー管理</h3>
+        <div id="adminUserList"></div>
+      </div>
+    </div>
+  `;
+
+  try {
+    const [stats, users] = await Promise.all([
+      fetchAPI('/admin/stats'),
+      fetchAPI('/admin/users')
+    ]);
+
+    document.getElementById('adminStats').innerHTML = `
+      <div class="admin-stat-card">
+        <span class="material-icons" style="font-size:32px;color:var(--accent-color)">people</span>
+        <div class="stat-value">${stats.totalUsers}</div>
+        <div class="stat-label">総ユーザー数</div>
+      </div>
+      <div class="admin-stat-card">
+        <span class="material-icons" style="font-size:32px;color:#ef4444">block</span>
+        <div class="stat-value">${stats.bannedUsers}</div>
+        <div class="stat-label">BANユーザー</div>
+      </div>
+      <div class="admin-stat-card">
+        <span class="material-icons" style="font-size:32px;color:#10b981">menu_book</span>
+        <div class="stat-value">${stats.totalWordbooks}</div>
+        <div class="stat-label">総単語帳数</div>
+      </div>
+      <div class="admin-stat-card">
+        <span class="material-icons" style="font-size:32px;color:#f59e0b">warning</span>
+        <div class="stat-value">${stats.totalWarnings}</div>
+        <div class="stat-label">発行済み警告</div>
+      </div>
+    `;
+
+    const userList = document.getElementById('adminUserList');
+    if (users.length === 0) {
+      userList.innerHTML = `<div style="padding:16px;color:var(--text-secondary)">ユーザーがいません。</div>`;
+      return;
+    }
+
+    userList.innerHTML = `
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>ユーザー名</th>
+            <th>登録IP</th>
+            <th>登録日</th>
+            <th>警告数</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="adminUserBody"></tbody>
+      </table>
+    `;
+
+    const tbody = document.getElementById('adminUserBody');
+    users.forEach(u => {
+      const d = new Date(u.created_at).toLocaleDateString('ja-JP');
+      const statusBadge = u.is_banned
+        ? '<span class="badge badge-banned">BAN</span>'
+        : u.is_admin
+          ? '<span class="badge badge-admin">管理者</span>'
+          : '<span class="badge badge-active">有効</span>';
+
+      const tr = document.createElement('tr');
+      const ipDisplay = u.registration_ip 
+        ? `<span style="cursor:pointer;color:var(--accent-color)" onclick="showIpUsers('${u.registration_ip}')">${u.registration_ip}</span>`
+        : '-';
+      tr.innerHTML = `
+        <td>${u.id}</td>
+        <td>
+          <a href="#/user/${u.username}" style="color:var(--accent-color)">${u.username}</a>
+          <button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${u.username}')" title="IPログ">
+            <span class="material-icons" style="font-size:14px">history</span>
+          </button>
+        </td>
+        <td style="font-family:monospace;font-size:12px">${ipDisplay}</td>
+        <td>${d}</td>
+        <td>
+          <span style="cursor:pointer;color:var(--accent-color)" onclick="showWarnings(${u.id}, '${u.username}')">${u.warning_count}</span>
+        </td>
+        <td>${statusBadge}</td>
+        <td>
+          <div style="display:flex;gap:8px">
+            <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${u.username}')" title="警告">
+              <span class="material-icons" style="font-size:16px">warning</span>
+            </button>
+            ${!u.is_admin ? (u.is_banned
+              ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id})" title="BAN解除">
+                   <span class="material-icons" style="font-size:16px">lock_open</span>
+                 </button>`
+              : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN">
+                   <span class="material-icons" style="font-size:16px">block</span>
+                 </button>`
+            ) : ''}
+            ${!u.is_admin ? `<button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${u.username}')" title="削除">
+              <span class="material-icons" style="font-size:16px">delete</span>
+            </button>` : ''}
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+  }
+}
+
+// 警告モーダル
+window.openWarnModal = (userId, username) => {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h2 style="font-size:18px">@${username} に警告を送信</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <form id="warnForm" style="padding-top:16px">
+        <label style="color:var(--text-secondary);font-size:14px">警告理由</label>
+        <textarea id="warnReason" required placeholder="警告の理由を入力..." style="height:100px;resize:none"></textarea>
+        <div id="warnError" class="error-msg"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:8px">
+          <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">キャンセル</button>
+          <button type="submit" class="btn-primary" style="background:#f59e0b">警告を送信</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('warnForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const reason = document.getElementById('warnReason').value;
+    try {
+      await fetchAPI(`/admin/users/${userId}/warn`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      overlay.remove();
+      router();
+    } catch (err) {
+      document.getElementById('warnError').textContent = err.message;
+    }
+  };
+};
+
+// BANモーダル
+window.openBanModal = (userId, username) => {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h2 style="font-size:18px">@${username} をBANする</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <form id="banForm" style="padding-top:16px">
+        <label style="color:var(--text-secondary);font-size:14px">BAN理由（任意）</label>
+        <textarea id="banReason" placeholder="BANの理由を入力..." style="height:100px;resize:none"></textarea>
+        <div id="banError" class="error-msg"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:8px">
+          <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">キャンセル</button>
+          <button type="submit" class="btn-primary" style="background:#ef4444">BANする</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('banForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const reason = document.getElementById('banReason').value;
+    try {
+      await fetchAPI(`/admin/users/${userId}/ban`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      overlay.remove();
+      router();
+    } catch (err) {
+      document.getElementById('banError').textContent = err.message;
+    }
+  };
+};
+
+// BAN解除
+window.unbanUser = async (userId) => {
+  if (!confirm('このユーザーのBANを解除しますか？')) return;
+  try {
+    await fetchAPI(`/admin/users/${userId}/unban`, { method: 'POST' });
+    router();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// 警告履歴表示
+window.showWarnings = async (userId, username) => {
+  try {
+    const warnings = await fetchAPI(`/admin/users/${userId}/warnings`);
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:500px">
+        <div class="modal-header">
+          <h2 style="font-size:18px">@${username} の警告履歴</h2>
+          <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+        </div>
+        <div style="padding-top:16px;max-height:400px;overflow-y:auto">
+          ${warnings.length === 0 
+            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">警告履歴はありません。</p>'
+            : warnings.map(w => `
+              <div style="padding:12px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-size:14px;margin-bottom:4px">${w.reason}</div>
+                  <div style="font-size:12px;color:var(--text-secondary)">
+                    ${new Date(w.created_at).toLocaleString('ja-JP')} - by @${w.admin_username}
+                  </div>
+                </div>
+                <button class="btn-sm" style="color:var(--error-color)" onclick="deleteWarning(${w.id})">
+                  <span class="material-icons" style="font-size:16px">delete</span>
+                </button>
+              </div>
+            `).join('')
+          }
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// 警告削除
+window.deleteWarning = async (warningId) => {
+  if (!confirm('この警告を削除しますか？')) return;
+  try {
+    await fetchAPI(`/admin/warnings/${warningId}`, { method: 'DELETE' });
+    document.querySelector('.modal-overlay')?.remove();
+    router();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// ユーザー削除
+window.deleteUser = async (userId, username) => {
+  if (!confirm(`@${username} を完全に削除しますか？\n\nこの操作は取り消せません。ユーザーの単語帳やコメントも全て削除されます。`)) return;
+  try {
+    await fetchAPI(`/admin/users/${userId}`, { method: 'DELETE' });
+    window.location.hash = '#/';
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// 管理者ドロップダウンメニュー切り替え
+window.toggleAdminMenu = (event) => {
+  event.stopPropagation();
+  const menu = document.getElementById('adminDropdownMenu');
+  if (menu) {
+    menu.classList.toggle('show');
+  }
+};
+
+// メニュー外クリックで閉じる
+document.addEventListener('click', () => {
+  const menu = document.getElementById('adminDropdownMenu');
+  if (menu) menu.classList.remove('show');
+});
+
+// IPアクティビティログ表示
+window.showIpLogs = async (userId, username) => {
+  try {
+    const logs = await fetchAPI(`/admin/users/${userId}/ip-logs`);
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:600px">
+        <div class="modal-header">
+          <h2 style="font-size:18px">@${username} のIPアクティビティ</h2>
+          <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+        </div>
+        <div style="padding-top:16px;max-height:400px;overflow-y:auto">
+          ${logs.length === 0 
+            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">アクティビティログはありません。</p>'
+            : `<table class="admin-table" style="font-size:13px">
+                <thead>
+                  <tr>
+                    <th>日時</th>
+                    <th>アクション</th>
+                    <th>IPアドレス</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${logs.map(log => `
+                    <tr>
+                      <td>${new Date(log.created_at).toLocaleString('ja-JP')}</td>
+                      <td>
+                        <span class="badge ${log.action === 'register' ? 'badge-admin' : 'badge-active'}">
+                          ${log.action === 'register' ? '登録' : 'ログイン'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style="font-family:monospace;cursor:pointer;color:var(--accent-color)" 
+                              onclick="this.closest('.modal-overlay').remove(); showIpUsers('${log.ip_address}')">
+                          ${log.ip_address}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>`
+          }
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// 並び替え変更
+function changeSort(sortValue) {
+  const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  urlParams.set('sort', sortValue);
+  const newHash = window.location.hash.split('?')[0] + '?' + urlParams.toString();
+  window.location.hash = newHash;
+}
+
+// 同じIPのユーザー一覧表示
+window.showIpUsers = async (ip) => {
+  try {
+    const users = await fetchAPI(`/admin/ip/${encodeURIComponent(ip)}/users`);
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:500px">
+        <div class="modal-header">
+          <h2 style="font-size:18px">IP: ${ip} のユーザー</h2>
+          <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+        </div>
+        <div style="padding-top:16px;max-height:400px;overflow-y:auto">
+          ${users.length === 0 
+            ? '<p style="color:var(--text-secondary);text-align:center;padding:16px">このIPからのユーザーはいません。</p>'
+            : `<div style="margin-bottom:12px;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:13px">
+                <strong>${users.length}人</strong>のユーザーがこのIPを使用
+              </div>
+              ${users.map(u => `
+                <div style="padding:12px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center">
+                  <div>
+                    <a href="#/user/${u.username}" style="color:var(--accent-color);font-weight:bold" 
+                       onclick="this.closest('.modal-overlay').remove()">@${u.username}</a>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                      登録: ${new Date(u.created_at).toLocaleDateString('ja-JP')} · アクティビティ: ${u.activity_count}回
+                    </div>
+                  </div>
+                  ${u.is_banned ? '<span class="badge badge-banned">BAN</span>' : ''}
+                </div>
+              `).join('')}`
+          }
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  } catch (err) {
+    alert(err.message);
+  }
+};

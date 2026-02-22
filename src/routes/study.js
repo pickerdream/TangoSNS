@@ -34,6 +34,12 @@ router.post('/finish', async (req, res) => {
             }
         }
 
+        // 3. 学習した単語のstudy_countをインクリメント
+        await client.query(
+            'UPDATE words SET study_count = study_count + 1 WHERE wordbook_id = $1',
+            [wordbookId]
+        );
+
         await client.query('COMMIT');
         res.status(201).json({ message: '学習記録を保存しました' });
     } catch (err) {

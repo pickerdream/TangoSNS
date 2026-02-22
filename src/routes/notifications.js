@@ -12,7 +12,7 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+            'SELECT * FROM notifications WHERE user_id = $1 ORDER BY (type = \'warning\') DESC, created_at DESC LIMIT 50',
             [req.user.id]
         );
         res.json(result.rows);

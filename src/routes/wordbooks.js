@@ -6,11 +6,12 @@ const { authenticate } = require('../middleware/auth');
 /**
  * GET /api/wordbooks
  * 単語帳一覧取得
- * クライアント側で ?username=... や ?q=... を指定可能
+ * クライアント側で ?username=... や ?q=... や ?tag=... や ?sort=... を指定可能
+ * sort: 'latest' (デフォルト), 'popular' (view_count DESC)
  */
 router.get('/', async (req, res) => {
     try {
-        const { username, q } = req.query;
+        const { username, q, tag, sort } = req.query;
 
         // ログイン中のユーザーIDを取得（認証は任意だが、完了マーク表示に必要）
         let currentUserId = null;
@@ -24,9 +25,16 @@ router.get('/', async (req, res) => {
         }
 
         let query = `
-      SELECT w.id, w.title, w.description, w.created_at,
+      SELECT w.id, w.title, w.description, w.created_at, w.view_count,
              u.id AS user_id, u.username, u.avatar_url,
-             EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed
+             EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed,
+             COALESCE(
+               (SELECT json_agg(json_build_object('id', t.id, 'name', t.name))
+                FROM wordbook_tags wt
+                JOIN tags t ON t.id = wt.tag_id
+                WHERE wt.wordbook_id = w.id),
+               '[]'
+             ) AS tags
       FROM wordbooks w
       JOIN users u ON w.user_id = u.id
     `;
@@ -41,11 +49,21 @@ router.get('/', async (req, res) => {
             params.push(`%${q}%`);
             conditions.push(`(w.title ILIKE $${params.length} OR w.description ILIKE $${params.length})`);
         }
+        if (tag) {
+            params.push(tag);
+            conditions.push(`EXISTS(SELECT 1 FROM wordbook_tags wt JOIN tags t ON t.id = wt.tag_id WHERE wt.wordbook_id = w.id AND t.name = $${params.length})`);
+        }
 
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
         }
-        query += ' ORDER BY w.created_at DESC';
+
+        // 並び替え
+        if (sort === 'popular') {
+            query += ' ORDER BY w.view_count DESC';
+        } else {
+            query += ' ORDER BY w.created_at DESC';
+        }
 
         const result = await db.query(query, params);
         res.json(result.rows);
@@ -58,9 +76,10 @@ router.get('/', async (req, res) => {
 /**
  * POST /api/wordbooks
  * 単語帳新規作成
+ * body: { title, description, tags: ["タグ1", "タグ2"] }
  */
 router.post('/', authenticate, async (req, res) => {
-    const { title, description } = req.body;
+    const { title, description, tags } = req.body;
     if (!title) return res.status(400).json({ error: 'タイトルは必須です' });
 
     try {
@@ -68,7 +87,33 @@ router.post('/', authenticate, async (req, res) => {
             'INSERT INTO wordbooks (user_id, title, description) VALUES ($1, $2, $3) RETURNING *',
             [req.user.id, title, description]
         );
-        res.status(201).json(result.rows[0]);
+        const wordbook = result.rows[0];
+
+        // タグを処理
+        if (tags && Array.isArray(tags) && tags.length > 0) {
+            for (const tagName of tags) {
+                const trimmed = tagName.trim().toLowerCase();
+                if (!trimmed) continue;
+
+                // タグを取得または作成
+                let tagResult = await db.query('SELECT id FROM tags WHERE name = $1', [trimmed]);
+                let tagId;
+                if (tagResult.rows[0]) {
+                    tagId = tagResult.rows[0].id;
+                } else {
+                    const newTag = await db.query('INSERT INTO tags (name) VALUES ($1) RETURNING id', [trimmed]);
+                    tagId = newTag.rows[0].id;
+                }
+
+                // 単語帳とタグを紐付け
+                await db.query(
+                    'INSERT INTO wordbook_tags (wordbook_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [wordbook.id, tagId]
+                );
+            }
+        }
+
+        res.status(201).json(wordbook);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'サーバーエラーが発生しました' });
@@ -94,24 +139,99 @@ router.get('/:id', async (req, res) => {
         }
 
         const wbResult = await db.query(
-            `SELECT w.id, w.title, w.description, w.created_at,
-               u.id AS user_id, u.username, u.avatar_url, u.bio,
-               COUNT(DISTINCT wd.id) AS word_count,
-               COUNT(DISTINCT c.id)  AS comment_count,
-               EXISTS(SELECT 1 FROM wordbook_completions comp WHERE comp.wordbook_id = w.id AND comp.user_id = $2) AS is_completed
-        FROM wordbooks w
-        JOIN users u ON w.user_id = u.id
-        LEFT JOIN words wd ON wd.wordbook_id = w.id
-        LEFT JOIN comments c ON c.wordbook_id = w.id
-        WHERE w.id = $1
-        GROUP BY w.id, u.id`,
-            [id, currentUserId]
+            `UPDATE wordbooks SET view_count = view_count + 1 WHERE id = $1
+             RETURNING id, title, description, created_at, view_count`,
+            [id]
         );
 
         if (!wbResult.rows[0]) {
             return res.status(404).json({ error: '単語帳が見つかりません' });
         }
-        res.json(wbResult.rows[0]);
+
+        const wordbook = wbResult.rows[0];
+
+        // ユーザー情報、単語数、コメント数、学習回数を取得
+        const detailsResult = await db.query(
+            `SELECT u.id AS user_id, u.username, u.avatar_url, u.bio,
+                    COUNT(DISTINCT wd.id) AS word_count,
+                    COUNT(DISTINCT c.id)  AS comment_count,
+                    COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = $1), 0) AS study_count,
+                    EXISTS(SELECT 1 FROM wordbook_completions comp WHERE comp.wordbook_id = $1 AND comp.user_id = $2) AS is_completed
+             FROM users u
+             LEFT JOIN words wd ON wd.wordbook_id = $1
+             LEFT JOIN comments c ON c.wordbook_id = $1
+             WHERE u.id = (SELECT user_id FROM wordbooks WHERE id = $1)
+             GROUP BY u.id`,
+            [id, currentUserId]
+        );
+
+        // タグを取得
+        const tagsResult = await db.query(`
+            SELECT t.id, t.name
+            FROM wordbook_tags wt
+            JOIN tags t ON t.id = wt.tag_id
+            WHERE wt.wordbook_id = $1
+            ORDER BY t.name
+        `, [id]);
+
+        res.json({ ...wordbook, ...detailsResult.rows[0], tags: tagsResult.rows });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * PUT /api/wordbooks/:id
+ * 単語帳を更新
+ * body: { title, description, tags: ["タグ1", "タグ2"] }
+ */
+router.put('/:id', authenticate, async (req, res) => {
+    const { id } = req.params;
+    const { title, description, tags } = req.body;
+
+    if (!title) return res.status(400).json({ error: 'タイトルは必須です' });
+
+    try {
+        // 所有権の確認
+        const check = await db.query('SELECT user_id FROM wordbooks WHERE id = $1', [id]);
+        if (!check.rows[0]) return res.status(404).json({ error: '単語帳が見つかりません' });
+        if (check.rows[0].user_id !== req.user.id) return res.status(403).json({ error: '編集権限がありません' });
+
+        // 単語帳を更新
+        await db.query(
+            'UPDATE wordbooks SET title = $1, description = $2 WHERE id = $3',
+            [title, description, id]
+        );
+
+        // 既存のタグを削除
+        await db.query('DELETE FROM wordbook_tags WHERE wordbook_id = $1', [id]);
+
+        // 新しいタグを追加
+        if (tags && Array.isArray(tags) && tags.length > 0) {
+            for (const tagName of tags) {
+                const trimmed = tagName.trim().toLowerCase();
+                if (!trimmed) continue;
+
+                // タグを取得または作成
+                let tagResult = await db.query('SELECT id FROM tags WHERE name = $1', [trimmed]);
+                let tagId;
+                if (tagResult.rows[0]) {
+                    tagId = tagResult.rows[0].id;
+                } else {
+                    const newTag = await db.query('INSERT INTO tags (name) VALUES ($1) RETURNING id', [trimmed]);
+                    tagId = newTag.rows[0].id;
+                }
+
+                // 単語帳とタグを紐付け
+                await db.query(
+                    'INSERT INTO wordbook_tags (wordbook_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [id, tagId]
+                );
+            }
+        }
+
+        res.json({ message: '単語帳を更新しました' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'サーバーエラーが発生しました' });

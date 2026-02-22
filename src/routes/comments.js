@@ -17,9 +17,9 @@ router.get('/', async (req, res) => {
         }
         const result = await db.query(
             `SELECT c.id, c.comment, c.created_at,
-              u.id AS user_id, u.username
-       FROM comments c
-       JOIN users u ON c.user_id = u.id
+                u.id AS user_id, u.username, u.avatar_url
+         FROM comments c
+         JOIN users u ON c.user_id = u.id
        WHERE c.wordbook_id = $1
        ORDER BY c.created_at ASC`,
             [id]
@@ -77,6 +77,7 @@ router.post('/', authenticate, async (req, res) => {
             created_at: row.created_at,
             user_id: req.user.id,
             username: req.user.username,
+            avatar_url: req.user.avatar_url,
         });
     } catch (err) {
         console.error(err);

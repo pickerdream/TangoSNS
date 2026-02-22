@@ -28,6 +28,33 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/wordbooks/:id/words/:wordId
+ * 単語詳細取得（閲覧数をカウント）
+ */
+router.get('/:wordId', async (req, res) => {
+    const { id, wordId } = req.params;
+    try {
+        // 単語帳の存在確認
+        const wb = await db.query('SELECT id FROM wordbooks WHERE id = $1', [id]);
+        if (!wb.rows[0]) {
+            return res.status(404).json({ error: '単語帳が見つかりません' });
+        }
+        // 単語を取得し、view_countをインクリメント
+        const result = await db.query(
+            'UPDATE words SET view_count = view_count + 1 WHERE id = $1 AND wordbook_id = $2 RETURNING *',
+            [wordId, id]
+        );
+        if (!result.rows[0]) {
+            return res.status(404).json({ error: '単語が見つかりません' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
  * POST /api/wordbooks/:id/words
  * 単語追加（所有者のみ）
  * body: { word, meaning }
