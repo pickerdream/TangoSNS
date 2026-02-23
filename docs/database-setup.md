@@ -79,7 +79,9 @@ PORT=3000
 - `DATABASE_URL`: PostgreSQL接続文字列
   - 形式: `postgresql://[ユーザー名]:[パスワード]@[ホスト]:[ポート]/[データベース名]`
   - 例: `postgresql://postgres:mypassword@localhost:5432/tangosns`
-- `JWT_SECRET`: JWTトークン署名用の秘密鍵（ランダムな文字列を推奨）
+- `JWT_SECRET`: JWTトークン署名用の秘密鍵（**必須・未設定時はサーバーが起動しません**）
+  - 最低32文字以上のランダムな文字列を設定してください。
+  - 生成例: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 - `PORT`: サーバーがリッスンするポート番号（デフォルト: 3000）
 
 ## 依存関係のインストール
