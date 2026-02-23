@@ -70,9 +70,10 @@ router.post('/finish', async (req, res) => {
 // 学習履歴の取得
 router.get('/history', async (req, res) => {
     try {
-        // 直近学習した単語帳を重複なしで最新順に取得しつつ、その単語帳での「間違えた単語数」も集計して返す
-        const result = await db.query(
-            `SELECT DISTINCT ON (h.wordbook_id) 
+        const { uncompleted, mistakes } = req.query;
+
+        let query = `
+        SELECT DISTINCT ON (h.wordbook_id) 
           h.wordbook_id, h.created_at as last_studied,
           w.title, w.description, u.username,
           (SELECT COUNT(*) FROM study_mistakes m WHERE m.user_id = h.user_id AND m.wordbook_id = h.wordbook_id) as mistakes_count,
@@ -81,9 +82,21 @@ router.get('/history', async (req, res) => {
         JOIN wordbooks w ON h.wordbook_id = w.id
         JOIN users u ON w.user_id = u.id
         WHERE h.user_id = $1
-        ORDER BY h.wordbook_id, h.created_at DESC`,
-            [req.user.id]
-        );
+        `;
+
+        const params = [req.user.id];
+
+        if (uncompleted === 'true') {
+            query += ` AND NOT EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = h.wordbook_id AND c.user_id = h.user_id)`;
+        }
+
+        if (mistakes === 'true') {
+            query += ` AND EXISTS(SELECT 1 FROM study_mistakes m WHERE m.wordbook_id = h.wordbook_id AND m.user_id = h.user_id)`;
+        }
+
+        query += ` ORDER BY h.wordbook_id, h.created_at DESC`;
+
+        const result = await db.query(query, params);
 
         // DISTINCT ON の仕様で wordbook_id 順になるため、アプリ側で last_studied の降順で並び替える
         const history = result.rows.sort((a, b) => new Date(b.last_studied) - new Date(a.last_studied));

@@ -103,5 +103,32 @@ function applyTheme(theme) {
 
 - 高コントラスト比の維持
 - 色覚障害者への配慮
-- フォーカスインジケーターの視認性確保</content>
+- フォーカスインジケーターの視認性確保
+
+## ダークモード実装上の注意点
+
+### `--bg-hover` は半透明のため背景用途に使用しない
+
+ダークモードでは `--bg-hover` が `#eff3f41a`（白の約10%不透明度）と定義されており、**ほぼ透明**です。
+ライトモードでは `#f0f3f4`（不透明）のため、この変数の扱いをモード間で統一しないとダークモードで意図しない透過が発生します。
+
+**既知の問題と対処（フラッシュカード）:**
+
+フラッシュカードの裏面 (`.flashcard-back`) にかつて `background-color: var(--bg-hover)` を使用していたため、ダークモードで裏面が半透明になり、`backface-visibility: hidden` で隠しているはずの表面テキストが透けて重なって見えるバグが発生していました。
+
+**修正:** `.flashcard-back` の背景色を `var(--bg-secondary)` に変更。`--bg-secondary` はダークモードでも `#16181c`（不透明）のため、この問題が解消されます。
+
+```css
+/* ❌ 修正前: ダークモードで半透明になる */
+.flashcard-back {
+  background-color: var(--bg-hover);
+}
+
+/* ✅ 修正後: 常に不透明な背景を持つ */
+.flashcard-back {
+  background-color: var(--bg-secondary);
+}
+```
+
+**原則:** 3D トランスフォームや `backface-visibility` を使うコンポーネントには、必ず不透明な背景色（`--bg-color` または `--bg-secondary`）を指定してください。</content>
 <parameter name="filePath">c:\Users\kouta\Documents\tangosns\docs\theme.md

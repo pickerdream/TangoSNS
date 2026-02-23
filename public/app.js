@@ -1,5 +1,19 @@
 const API_BASE = '/api';
 
+// ホームタブ切り替え関数
+window.switchHomeTab = (tab) => {
+  const newHash = tab === 'latest' ? '#/' : '#/?following_only=true';
+  const currentHash = window.location.hash || '#/';
+  
+  // ハッシュを設定
+  window.location.hash = newHash;
+  
+  // ハッシュが変わらない場合は手動でイベントをトリガー
+  if (currentHash === newHash) {
+    window.dispatchEvent(new Event('hashchange'));
+  }
+};
+
 // ルーター関数
 const router = async () => {
   const hash = window.location.hash || '#/';
@@ -476,12 +490,15 @@ function renderRegister(container) {
 }
 
 // === ホームフィード ===
-async function renderHomeFeed(container, token, user) {
-  const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
+async function renderHomeFeed(container, token, user, initialUrlParams = null) {
+  let urlParams = initialUrlParams || new URLSearchParams(window.location.hash.split('?')[1]);
   const q = urlParams.get('q');
   const tag = urlParams.get('tag');
   const sort = urlParams.get('sort') || 'latest';
   const followingOnly = urlParams.get('following_only') === 'true';
+  const uncompleted = urlParams.get('uncompleted') === 'true';
+  const unstudied = urlParams.get('unstudied') === 'true';
+  const mistakes = urlParams.get('mistakes') === 'true';
 
   let headerTitle = 'ホーム';
   if (q) headerTitle = `検索結果: ${q}`;
@@ -494,9 +511,25 @@ async function renderHomeFeed(container, token, user) {
     </div>
     ${(!q && !tag && user) ? `
       <div class="home-tabs">
-        <div class="home-tab ${!followingOnly ? 'active' : ''}" onclick="window.location.hash='#'/">おすすめ</div>
-        <div class="home-tab ${followingOnly ? 'active' : ''}" onclick="window.location.hash='#/?following_only=true'">フォロー中</div>
+        <div class="home-tab ${!followingOnly ? 'active' : ''}" onclick="switchHomeTab('latest')">最新</div>
+        <div class="home-tab ${followingOnly ? 'active' : ''}" onclick="switchHomeTab('following')">フォロー中</div>
       </div>
+    ` : ''}
+    ${(q || tag) && user ? `
+    <div class="filter-bar" style="padding:12px 16px; display:flex; gap:12px; border-bottom:1px solid var(--border-color); flex-wrap:wrap">
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none ${uncompleted ? 'background:rgba(59, 130, 246, 0.1); border-color:var(--accent-color); color:var(--accent-color)' : ''}">
+        <input type="checkbox" id="filterUncompleted" ${uncompleted ? 'checked' : ''} style="display:none">
+        <span class="material-icons" style="font-size:16px">check_circle_outline</span> 未完了
+      </label>
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none ${unstudied ? 'background:rgba(59, 130, 246, 0.1); border-color:var(--accent-color); color:var(--accent-color)' : ''}">
+        <input type="checkbox" id="filterUnstudied" ${unstudied ? 'checked' : ''} style="display:none">
+        <span class="material-icons" style="font-size:16px">history</span> 未学習
+      </label>
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none ${mistakes ? 'background:rgba(59, 130, 246, 0.1); border-color:var(--accent-color); color:var(--accent-color)' : ''}">
+        <input type="checkbox" id="filterMistakes" ${mistakes ? 'checked' : ''} style="display:none">
+        <span class="material-icons" style="font-size:16px">error_outline</span> 間違えあり
+      </label>
+    </div>
     ` : ''}
     ${(q || tag) ? `
     <div style="margin-bottom: 16px; padding: 0 16px">
@@ -509,22 +542,29 @@ async function renderHomeFeed(container, token, user) {
     <div id="feedList"></div>
   `;
 
-  try {
-    let url = '/wordbooks';
-    const params = [];
-    if (q) params.push(`q=${encodeURIComponent(q)}`);
-    if (tag) params.push(`tag=${encodeURIComponent(tag)}`);
-    if (sort) params.push(`sort=${encodeURIComponent(sort)}`);
-    if (followingOnly) params.push(`following_only=true`);
-    if (params.length > 0) url += '?' + params.join('&');
+  const renderFeed = async () => {
+    try {
+      let url = '/wordbooks';
+      const params = [];
+      if (urlParams.get('q')) params.push(`q=${encodeURIComponent(urlParams.get('q'))}`);
+      if (urlParams.get('tag')) params.push(`tag=${encodeURIComponent(urlParams.get('tag'))}`);
+      if (urlParams.get('sort')) params.push(`sort=${encodeURIComponent(urlParams.get('sort'))}`);
+      if (urlParams.get('following_only') === 'true') params.push(`following_only=true`);
+      if (urlParams.get('uncompleted') === 'true') params.push(`uncompleted=true`);
+      if (urlParams.get('unstudied') === 'true') params.push(`unstudied=true`);
+      if (urlParams.get('mistakes') === 'true') params.push(`mistakes=true`);
+      if (params.length > 0) url += '?' + params.join('&');
 
-    const wordbooks = await fetchAPI(url);
-    const feedList = document.getElementById('feedList');
+      const wordbooks = await fetchAPI(url);
+      const feedList = document.getElementById('feedList');
+      
+      // 前の結果をクリア
+      feedList.innerHTML = '';
 
-    if (wordbooks.length === 0) {
-      feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">まだ単語帳がありません。${followingOnly ? '誰かをフォローして、フィードを充実させましょう！' : '最初の単語帳を作成しましょう！'}</div>`;
-      return;
-    }
+      if (wordbooks.length === 0) {
+        feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">まだ単語帳がありません。${urlParams.get('following_only') === 'true' ? '誰かをフォローして、フィードを充実させましょう！' : '最初の単語帳を作成しましょう！'}</div>`;
+        return;
+      }
 
     wordbooks.forEach(wb => {
       const d = new Date(wb.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -599,9 +639,59 @@ async function renderHomeFeed(container, token, user) {
 
       feedList.appendChild(card);
     });
-  } catch (err) {
-    container.innerHTML += `<div class="error-msg" style="padding:16px">${err.message}</div>`;
+    } catch (err) {
+      const feedList = document.getElementById('feedList');
+      if (feedList) {
+        feedList.innerHTML = `<div class="error-msg" style="padding:16px">${err.message}</div>`;
+      }
+    }
+  };
+
+  renderFeed();
+
+  // フィルタイベント設定
+  if ((urlParams.get('q') || urlParams.get('tag')) && user) {
+    const setupFilter = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const label = el.parentElement;
+      
+      // 初期状態のスタイルを設定
+      const updateFilterStyle = () => {
+        if (el.checked) {
+          label.style.background = 'rgba(59, 130, 246, 0.1)';
+          label.style.borderColor = 'var(--accent-color)';
+          label.style.color = 'var(--accent-color)';
+        } else {
+          label.style.background = 'var(--bg-secondary)';
+          label.style.borderColor = 'var(--border-color)';
+          label.style.color = 'var(--text-primary)';
+        }
+      };
+      
+      updateFilterStyle();
+      
+      el.onchange = () => {
+        if (el.checked) {
+          urlParams.set(key, 'true');
+        } else {
+          urlParams.delete(key);
+        }
+        updateFilterStyle();
+        renderFeed();
+      };
+    };
+
+    setupFilter('filterUncompleted', 'uncompleted');
+    setupFilter('filterUnstudied', 'unstudied');
+    setupFilter('filterMistakes', 'mistakes');
   }
+
+  // changeSort定義
+  window.changeSort = (sortValue) => {
+    urlParams.set('sort', sortValue);
+    renderFeed();
+  };
 }
 
 // === 設定 (テーマ・パスワード) ===
@@ -867,6 +957,15 @@ async function renderWordbookDetail(container, wbId, token, user) {
     const isGuest = !user;
     const words = await fetchAPI(`/wordbooks/${wbId}/words`);
 
+    // ログイン中のユーザーの間違い単語IDセットを取得
+    let mistakeWordIds = new Set();
+    if (!isGuest) {
+      try {
+        const mistakeList = await fetchAPI(`/study/mistakes/${wbId}`);
+        mistakeList.forEach(m => mistakeWordIds.add(m.id));
+      } catch (e) { /* 未学習の場合は空のままにする */ }
+    }
+
     let html = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
@@ -965,6 +1064,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
             <tr style="border-bottom:2px solid var(--border-color)">
               <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">単語</th>
               <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">意味</th>
+              ${!isGuest ? '<th style="text-align:center; padding:12px; font-weight:bold; color:var(--text-secondary); width:60px">状況</th>' : ''}
               ${isOwner ? '<th style="text-align:center; padding:12px; font-weight:bold; color:var(--text-secondary); width:50px">削除</th>' : ''}
             </tr>
           </thead>
@@ -1002,9 +1102,20 @@ async function renderWordbookDetail(container, wbId, token, user) {
       visibleWords.forEach(w => {
         const row = document.createElement('tr');
         row.style.borderBottom = '1px solid var(--border-color)';
+        const isMistake = mistakeWordIds.has(w.id);
+        const statusCell = !isGuest
+          ? `<td style="padding:12px; text-align:center">
+               ${mistakeWordIds.size > 0 || isMistake
+                 ? isMistake
+                   ? `<span class="material-icons" style="font-size:18px; color:var(--error-color)" title="直近の学習で間違えた単語">close</span>`
+                   : `<span class="material-icons" style="font-size:18px; color:#00ba7c" title="直近の学習で正解した単語">check</span>`
+                 : ''}
+             </td>`
+          : '';
         row.innerHTML = `
           <td style="padding:12px; color:var(--text-primary)">${w.word}</td>
           <td style="padding:12px; color:var(--text-primary)">${w.meaning}</td>
+          ${statusCell}
           ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
         `;
         wordTableBody.appendChild(row);
@@ -1213,40 +1324,48 @@ window.submitEditWordbook = async (btn, wbId) => {
 
 // === 学習履歴画面 ===
 async function renderHistory(container) {
+  // フィルター状態
+  const historyFilters = {
+    uncompleted: false,
+    mistakes: false
+  };
+
   container.innerHTML = `
-    <div class="header" style="flex-direction:column; align-items:flex-start;">
-      <h2>学習履歴</h2>
-      <label style="margin-top:12px; display:flex; align-items:center; gap:8px; cursor:pointer;" id="filterMistakesLabel">
-        <input type="checkbox" id="filterMistakesCheck" style="accent-color:var(--accent-color)">
-        <span style="color:var(--text-secondary); font-size:14px">間違えた単語がある単語帳のみ表示</span>
+    <div class="header">
+      <h2><span class="material-icons" style="vertical-align:middle;margin-right:8px;color:var(--accent-color)">history</span>学習履歴</h2>
+    </div>
+    <div class="filter-bar" style="padding:12px 16px; display:flex; gap:12px; border-bottom:1px solid var(--border-color); flex-wrap:wrap">
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
+        <input type="checkbox" id="filterUncompleted" style="display:none">
+        <span class="material-icons" style="font-size:16px">check_circle_outline</span> 未完了
+      </label>
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
+        <input type="checkbox" id="filterMistakes" style="display:none">
+        <span class="material-icons" style="font-size:16px">error_outline</span> 間違えあり
       </label>
     </div>
     <div id="historyList"></div>
   `;
 
-  try {
-    const history = await fetchAPI('/study/history');
+  const renderList = async () => {
     const list = document.getElementById('historyList');
+    if (!list) return;
+    list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>`;
 
-    if (history.length === 0) {
-      list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">まだ学習履歴がありません。</div>`;
-      return;
-    }
+    try {
+      const params = new URLSearchParams();
+      if (historyFilters.uncompleted) params.append('uncompleted', 'true');
+      if (historyFilters.mistakes) params.append('mistakes', 'true');
 
-    let allHistory = history;
-
-    const renderList = (filterEnabled) => {
+      const history = await fetchAPI(`/study/history?${params.toString()}`);
       list.innerHTML = '';
-      const displayData = filterEnabled
-        ? allHistory.filter(h => Number(h.mistakes_count) > 0)
-        : allHistory;
 
-      if (displayData.length === 0) {
-        list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">表示できる履歴がありません。</div>`;
+      if (history.length === 0) {
+        list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">学習履歴はありません。</div>`;
         return;
       }
 
-      displayData.forEach(h => {
+      history.forEach(h => {
         const d = new Date(h.last_studied).toLocaleString('ja-JP');
         const mCount = Number(h.mistakes_count);
 
@@ -1283,20 +1402,40 @@ async function renderHistory(container) {
         `;
         list.appendChild(card);
       });
+    } catch (err) {
+      console.error(err);
+      list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--error-color)">読み込みに失敗しました</div>`;
+    }
+  };
+
+  // フィルター初期化
+  const setupFilter = (id, key) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    const label = input.parentElement;
+
+    input.onchange = () => {
+      historyFilters[key] = input.checked;
+      if (input.checked) {
+        label.style.background = 'rgba(0, 186, 124, 0.1)';
+        label.style.borderColor = 'var(--accent-color)';
+        label.style.color = 'var(--accent-color)';
+        label.querySelector('.material-icons').textContent = key === 'uncompleted' ? 'check_circle' : 'error';
+      } else {
+        label.style.background = 'var(--bg-secondary)';
+        label.style.borderColor = 'var(--border-color)';
+        label.style.color = 'var(--text-primary)';
+        label.querySelector('.material-icons').textContent = key === 'uncompleted' ? 'check_circle_outline' : 'error_outline';
+      }
+      renderList();
     };
+  };
 
-    // 初回描画
-    renderList(false);
+  setupFilter('filterUncompleted', 'uncompleted');
+  setupFilter('filterMistakes', 'mistakes');
 
-    // フィルタ切り替えイベント
-    const checkbox = document.getElementById('filterMistakesCheck');
-    checkbox.addEventListener('change', (e) => {
-      renderList(e.target.checked);
-    });
-
-  } catch (err) {
-    container.innerHTML += `<div class="error-msg" style="padding:16px">${err.message}</div>`;
-  }
+  // 初回表示
+  renderList();
 }
 
 // 復習スタート用関数
@@ -2053,14 +2192,6 @@ window.showIpLogs = async (userId, username) => {
   }
 };
 
-// 並び替え変更
-function changeSort(sortValue) {
-  const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-  urlParams.set('sort', sortValue);
-  const newHash = window.location.hash.split('?')[0] + '?' + urlParams.toString();
-  window.location.hash = newHash;
-}
-
 // 同じIPのユーザー一覧表示
 window.showIpUsers = async (ip) => {
   try {
@@ -2243,15 +2374,15 @@ async function renderBookmarkedFeed(container, token, user) {
     <div class="filter-bar" style="padding:12px 16px; display:flex; gap:12px; border-bottom:1px solid var(--border-color); flex-wrap:wrap">
       <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
         <input type="checkbox" id="filterUncompleted" style="display:none">
-        <span class="material-icons" style="font-size:16px">check_circle_outline</span> 未完了 (完了ボタン未)
+        <span class="material-icons" style="font-size:16px">check_circle_outline</span> 未完了
       </label>
       <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
         <input type="checkbox" id="filterUnstudied" style="display:none">
-        <span class="material-icons" style="font-size:16px">history</span> 未学習 (一度も学習なし)
+        <span class="material-icons" style="font-size:16px">history</span> 未学習
       </label>
       <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
         <input type="checkbox" id="filterMistakes" style="display:none">
-        <span class="material-icons" style="font-size:16px">error_outline</span> 間違えあり (克服中)
+        <span class="material-icons" style="font-size:16px">error_outline</span> 間違えあり
       </label>
     </div>
     <div id="feedList"></div>

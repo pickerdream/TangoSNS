@@ -11,7 +11,7 @@ const { authenticate } = require('../middleware/auth');
  */
 router.get('/', async (req, res) => {
     try {
-        const { username, q, tag, sort, following_only } = req.query;
+        const { username, q, tag, sort, following_only, uncompleted, unstudied, mistakes } = req.query;
 
         // ログイン中のユーザーIDを取得（認証は任意だが、完了マーク表示に必要）
         let currentUserId = null;
@@ -55,6 +55,19 @@ router.get('/', async (req, res) => {
         }
         if (following_only === 'true' && currentUserId) {
             conditions.push(`EXISTS(SELECT 1 FROM follows f WHERE f.following_id = w.user_id AND f.follower_id = $1)`);
+        }
+
+        // 状態フィルタ（ログイン時のみ有効）
+        if (currentUserId) {
+            if (uncompleted === 'true') {
+                conditions.push(`NOT EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1)`);
+            }
+            if (unstudied === 'true') {
+                conditions.push(`NOT EXISTS(SELECT 1 FROM study_history h WHERE h.wordbook_id = w.id AND h.user_id = $1)`);
+            }
+            if (mistakes === 'true') {
+                conditions.push(`EXISTS(SELECT 1 FROM study_mistakes m WHERE m.wordbook_id = w.id AND m.user_id = $1)`);
+            }
         }
 
         if (conditions.length > 0) {
