@@ -1,29 +1,36 @@
-# データベースセットアップガイド
+# データベースセットアップ
 
-このドキュメントでは、TangoSNSの初回データベース作成とマイグレーションの手順について説明します。
+TangoSNS が使用する PostgreSQL の準備手順を説明します。
+
+サーバー全体のセットアップ（Node.js のインストール、依存関係、起動方法）は [サーバーセットアップ](./setup.md) を参照してください。
+
+---
 
 ## 前提条件
 
-- Node.js 18以上
-- PostgreSQL 12以上
-- npmまたはyarn
+- PostgreSQL 12 以上
 
-## PostgreSQLのインストール
+---
 
-### Windowsの場合
-1. [PostgreSQL公式サイト](https://www.postgresql.org/download/windows/)からインストーラーをダウンロード
-2. インストーラーを実行し、以下の設定でインストール：
-   - ポート: 5432 (デフォルト)
-   - パスワード: 任意（後で.envに設定）
-   - その他の設定はデフォルトでOK
+## PostgreSQL のインストール
 
-### macOSの場合
+### Windows
+
+1. [PostgreSQL 公式サイト](https://www.postgresql.org/download/windows/) からインストーラーをダウンロード
+2. インストール時の設定:
+   - ポート: `5432`（デフォルト）
+   - パスワード: 任意（後で `.env` に設定）
+   - その他はデフォルトでOK
+
+### macOS
+
 ```bash
 brew install postgresql
 brew services start postgresql
 ```
 
-### Linux (Ubuntu/Debian)の場合
+### Linux (Ubuntu/Debian)
+
 ```bash
 sudo apt update
 sudo apt install postgresql postgresql-contrib
@@ -31,138 +38,69 @@ sudo systemctl start postgresql
 sudo systemctl enable postgresql
 ```
 
-## データベースの作成
+---
 
-PostgreSQLに接続してデータベースを作成します。
+## データベースとユーザーの作成
 
-### コマンドラインから作成
 ```bash
-# PostgreSQLに接続（パスワードを入力）
 psql -U postgres
+```
 
-# データベース作成
+```sql
+-- データベース作成
 CREATE DATABASE tangosns;
 
-# ユーザー作成（任意）
+-- ユーザー作成
 CREATE USER tangosns_user WITH PASSWORD 'your_password';
 
-# 権限付与
+-- 権限付与
 GRANT ALL PRIVILEGES ON DATABASE tangosns TO tangosns_user;
 
-# 終了
 \q
 ```
 
-### pgAdminを使用する場合
-1. pgAdminを起動
-2. サーバーに接続
-3. Databasesを右クリック → Create → Database
-4. Database name: `tangosns`
-5. Owner: `postgres` または作成したユーザー
+pgAdmin を使用する場合は「Databases → Create → Database」からデータベース名 `tangosns` で作成してください。
 
-## 環境変数の設定
+---
 
-プロジェクトルートに`.env`ファイルを作成し、データベース接続情報を設定します。
+## 環境変数（DB関連）
+
+プロジェクトルートの `.env` にデータベース接続情報を設定します。
 
 ```env
-# データベース設定
-DATABASE_URL=postgresql://username:password@localhost:5432/tangosns
-
-# JWT設定
-JWT_SECRET=your_super_secret_jwt_key_here
-
-# サーバーポート
-PORT=3000
+PGUSER=tangosns_user
+PGHOST=localhost
+PGDATABASE=tangosns
+PGPASSWORD=your_password
+PGPORT=5432
 ```
 
-### 設定値の説明
-- `DATABASE_URL`: PostgreSQL接続文字列
-  - 形式: `postgresql://[ユーザー名]:[パスワード]@[ホスト]:[ポート]/[データベース名]`
-  - 例: `postgresql://postgres:mypassword@localhost:5432/tangosns`
-- `JWT_SECRET`: JWTトークン署名用の秘密鍵（**必須・未設定時はサーバーが起動しません**）
-  - 最低32文字以上のランダムな文字列を設定してください。
-  - 生成例: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-- `PORT`: サーバーがリッスンするポート番号（デフォルト: 3000）
+JWT_SECRET や PORT などのサーバー設定は [サーバーセットアップ](./setup.md) を参照してください。
 
-## 依存関係のインストール
+---
 
-```bash
-npm install
-```
+## マイグレーション
 
-## マイグレーションの実行
+マイグレーションはサーバー起動時に **自動で実行**されます。`npm start` を実行するだけでスキーマが最新状態になります。
 
-データベーススキーマを作成するためにマイグレーションを実行します。
+手動で実行したい場合（CI/CD など）:
 
 ```bash
-# マイグレーション実行
 npm run migrate
-
-# または直接実行
-npx node-pg-migrate up
 ```
 
-### マイグレーションの実行結果例
-```
-> dotenv -- node-pg-migrate up
-[dotenv@17.3.1] injecting env (5) from .env
-### MIGRATION 1771738551846_create-users-table (UP) ###
-CREATE TABLE
-ALTER TABLE
-INSERT 0 1
-### MIGRATION 1771738607333_create-wordbooks-words-comments-tables (UP) ###
-CREATE TABLE
-...
-```
+マイグレーションの仕組みや追加方法は [マイグレーションガイド](./migrations.md) を参照してください。
 
-## 初期データの投入（任意）
+---
 
-### 管理者ユーザーの作成
+## 接続確認
 
-開発・テスト用に管理者ユーザーを作成できます。
-
-```sql
--- PostgreSQLに接続
-psql -U postgres -d tangosns
-
--- 管理者ユーザー作成
-INSERT INTO users (username, password, is_admin, created_at)
-VALUES ('admin', '$2a$10$...', true, CURRENT_TIMESTAMP);
-```
-
-パスワードはbcryptでハッシュ化する必要があります。以下のNode.jsスクリプトで生成できます：
-
-```javascript
-const bcrypt = require('bcryptjs');
-console.log(bcrypt.hashSync('admin_password', 10));
-```
-
-### サンプルデータの投入
-
-開発用にサンプル単語帳を作成する場合：
-
-```sql
--- サンプルユーザー作成
-INSERT INTO users (username, password, created_at)
-VALUES ('testuser', '$2a$10$...', CURRENT_TIMESTAMP);
-
--- サンプル単語帳作成
-INSERT INTO wordbooks (user_id, title, description, created_at)
-VALUES (1, 'TOEIC基本単語', 'TOEIC試験でよく出る基本単語集', CURRENT_TIMESTAMP);
-
--- サンプル単語追加
-INSERT INTO words (wordbook_id, word, meaning, created_at)
-VALUES (1, 'apple', 'りんご', CURRENT_TIMESTAMP);
-```
-
-## 動作確認
-
-### データベース接続確認
 ```bash
 node check-db.js
 ```
 
-成功すると以下のように表示されます：
+成功すると以下のように表示されます:
+
 ```
 データベースへの接続に成功しました。
 テーブル一覧:
@@ -170,46 +108,61 @@ node check-db.js
 - users
 - wordbooks
 - words
-- comments
 ...
 ```
 
-### サーバー起動確認
-```bash
-npm start
+---
+
+## 初期データの投入（任意）
+
+### 管理者ユーザーの作成
+
+アプリ経由で登録したユーザーを管理者に昇格させます:
+
+```sql
+psql -U tangosns_user -d tangosns
+
+UPDATE users SET is_admin = true WHERE username = 'your_username';
 ```
 
-ブラウザで `http://localhost:3000` にアクセスし、ログイン画面が表示されることを確認します。
+パスワード付きで直接INSERTする場合、パスワードは bcrypt ハッシュが必要です:
+
+```javascript
+const bcrypt = require('bcryptjs');
+console.log(bcrypt.hashSync('your_password', 10));
+```
+
+### サンプルデータ
+
+```sql
+INSERT INTO wordbooks (user_id, title, description, created_at)
+VALUES (1, 'TOEIC基本単語', 'TOEIC試験でよく出る基本単語集', CURRENT_TIMESTAMP);
+
+INSERT INTO words (wordbook_id, word, meaning, created_at)
+VALUES (1, 'apple', 'りんご', CURRENT_TIMESTAMP);
+```
+
+---
 
 ## トラブルシューティング
 
-### マイグレーションエラー
-- `.env`ファイルのDATABASE_URLが正しいか確認
-- PostgreSQLが起動しているか確認
-- データベースが存在するか確認
-
-### 接続エラー
-- PostgreSQLのポート（デフォルト5432）が開放されているか確認
-- ファイアウォール設定を確認
-- ユーザー名/パスワードが正しいか確認
+| 症状 | 確認事項 |
+|------|---------|
+| 接続エラー | `.env` の `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` が正しいか確認 |
+| データベースが存在しない | `CREATE DATABASE` が実行済みか確認 |
+| 権限エラー | `GRANT ALL PRIVILEGES` が実行済みか確認 |
+| PostgreSQL が起動していない | `brew services start postgresql` / `systemctl start postgresql` で起動 |
 
 ### マイグレーションのロールバック
+
 ```bash
-# 最新のマイグレーションをロールバック
+# 最新1件をロールバック
 npx node-pg-migrate down
 
-# 全てのマイグレーションをロールバック
-npx node-pg-migrate down [マイグレーション数]
+# N件ロールバック
+npx node-pg-migrate down N
 ```
 
-## マイグレーションの追加
+---
 
-新しいスキーマ変更が必要な場合は、[マイグレーションガイド](./migrations.md)を参照してください。
-
-## 本番環境での注意
-
-- パスワードは強力なものを設定
-- JWT_SECRETは環境ごとに異なるものを設定
-- データベースバックアップを定期的に実行
-- SSL接続を有効化</content>
-<parameter name="filePath">c:\Users\kouta\Documents\tangosns\docs\database-setup.md
+[ホームへ戻る](./README.md)
