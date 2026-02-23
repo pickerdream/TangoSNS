@@ -2193,10 +2193,11 @@ window.showIpLogs = async (userId, username) => {
                         </span>
                       </td>
                       <td>
-                        <span style="font-family:monospace;cursor:pointer;color:var(--accent-color)" 
+                        <span style="font-family:monospace;cursor:pointer;color:var(--accent-color)"
                               onclick="this.closest('.modal-overlay').remove(); showIpUsers('${log.ip_address}')">
                           ${log.ip_address}
                         </span>
+                        ${log.port != null ? `<span style="font-size:11px;color:var(--text-secondary)">:${log.port}</span>` : ''}
                       </td>
                     </tr>
                   `).join('')}

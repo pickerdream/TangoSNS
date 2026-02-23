@@ -70,6 +70,16 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'サーバーエラーが発生しました' });
 });
 
-app.listen(port, () => {
-  console.log(`🚀 サーバー起動中: http://localhost:${port}`);
-});
+const { runMigrations } = require('./migrate');
+
+(async () => {
+  try {
+    await runMigrations();
+    app.listen(port, () => {
+      console.log(`🚀 サーバー起動中: http://localhost:${port}`);
+    });
+  } catch (err) {
+    console.error('マイグレーション失敗:', err.message);
+    process.exit(1);
+  }
+})();

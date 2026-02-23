@@ -183,7 +183,7 @@ router.get('/users/:id/ip-logs', authenticate, requireAdmin, async (req, res) =>
   const { id } = req.params;
   try {
     const result = await db.query(`
-      SELECT id, ip_address, action, user_agent, created_at
+      SELECT id, ip_address, port, action, user_agent, created_at
       FROM user_ip_logs
       WHERE user_id = $1
       ORDER BY created_at DESC

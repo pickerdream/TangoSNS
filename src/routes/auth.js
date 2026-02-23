@@ -27,8 +27,9 @@ router.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'パスワードは128文字以内にしてください' });
     }
 
-    // IPアドレスとUser-Agentを取得
+    // IPアドレス・ポート・User-Agentを取得
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const port = req.socket?.remotePort || null;
     const userAgent = req.headers['user-agent'] || null;
 
     try {
@@ -41,8 +42,8 @@ router.post('/register', async (req, res) => {
 
         // IPアクティビティログに記録
         await db.query(
-            'INSERT INTO user_ip_logs (user_id, ip_address, action, user_agent) VALUES ($1, $2, $3, $4)',
-            [user.id, ip, 'register', userAgent]
+            'INSERT INTO user_ip_logs (user_id, ip_address, port, action, user_agent) VALUES ($1, $2, $3, $4, $5)',
+            [user.id, ip, port, 'register', userAgent]
         );
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
@@ -88,14 +89,15 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'ユーザー名またはパスワードが正しくありません' });
         }
 
-        // IPアドレスとUser-Agentを取得
+        // IPアドレス・ポート・User-Agentを取得
         const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+        const port = req.socket?.remotePort || null;
         const userAgent = req.headers['user-agent'] || null;
 
         // IPアクティビティログに記録
         await db.query(
-            'INSERT INTO user_ip_logs (user_id, ip_address, action, user_agent) VALUES ($1, $2, $3, $4)',
-            [user.id, ip, 'login', userAgent]
+            'INSERT INTO user_ip_logs (user_id, ip_address, port, action, user_agent) VALUES ($1, $2, $3, $4, $5)',
+            [user.id, ip, port, 'login', userAgent]
         );
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });

@@ -62,6 +62,43 @@ UPDATE users SET is_admin = false WHERE id = [ユーザーID];
 - 警告通知は特別扱いされ、赤く強調表示
 - 確認ダイアログで既読化
 
+### 5. IPアクティビティログ
+
+登録・ログインのたびに接続元のIPアドレス、ポート番号、User-Agentを `user_ip_logs` テーブルに記録します。
+
+#### 記録タイミング
+
+| アクション | エンドポイント | 記録内容 |
+|-----------|--------------|---------|
+| ユーザー登録 | `POST /api/auth/register` | ip_address, port, action='register', user_agent |
+| ログイン | `POST /api/auth/login` | ip_address, port, action='login', user_agent |
+
+#### ポート番号の取得方法
+
+```javascript
+// src/routes/auth.js
+const ip   = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+             || req.socket?.remoteAddress || null;
+const port = req.socket?.remotePort || null;  // クライアントの送信元ポート
+```
+
+`port` はベストエフォートで取得します。プロキシ経由の場合などは `null` になることがあります。
+
+#### 管理画面での表示
+
+「IPアクティビティ」モーダルでは、ポートが記録されている場合にIPアドレスの右に `:ポート番号` を小さく表示します。
+
+```
+192.168.1.1 :54321
+```
+
+ポートが `null`（記録なし）の場合は何も表示しません。旧ログとの互換性は維持されます。
+
+#### APIエンドポイント
+
+- `GET /api/admin/users/:id/ip-logs` — ユーザーのIPログを最新50件取得（`port` フィールドを含む）
+- `GET /api/admin/ip/:ip/users` — 同一IPから操作したユーザー一覧を取得
+
 ## データベース構造
 
 ### usersテーブル
@@ -74,6 +111,14 @@ UPDATE users SET is_admin = false WHERE id = [ユーザーID];
 - `admin_id`: integer - 警告実行管理者
 - `reason`: text - 警告理由
 - `created_at`: timestamp - 警告日時
+
+### user_ip_logsテーブル
+- `user_id`: integer - ログ対象ユーザー
+- `ip_address`: varchar(45) - 接続元IPアドレス（IPv6対応）
+- `port`: integer - 接続元ポート番号（null可）
+- `action`: varchar(20) - `'register'` または `'login'`
+- `user_agent`: text - ブラウザ情報
+- `created_at`: timestamp - 記録日時
 
 ### notificationsテーブル
 - `type`: varchar(20) - 通知タイプ（'warning', 'comment'など）
