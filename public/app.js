@@ -1057,8 +1057,18 @@ async function renderWordbookDetail(container, wbId, token, user) {
             <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); margin-left:auto" onclick='openEditWordbookModal(${JSON.stringify(wb).replace(/'/g, "&#39;")})'>
               <span class="material-icons" style="vertical-align:middle;margin-right:4px;font-size:18px">edit</span>編集
             </button>
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="exportWordsCSV(${wb.id})">
+              <span class="material-icons" style="vertical-align:middle;margin-right:4px;font-size:18px">download</span>エクスポート
+            </button>
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openImportCSVModal(${wb.id})">
+              <span class="material-icons" style="vertical-align:middle;margin-right:4px;font-size:18px">upload</span>インポート
+            </button>
             <button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color)" onclick="deleteWordbook(${wb.id})">削除</button>
-          ` : ''}
+          ` : `
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); margin-left:auto" onclick="exportWordsCSV(${wb.id})">
+              <span class="material-icons" style="vertical-align:middle;margin-right:4px;font-size:18px">download</span>エクスポート
+            </button>
+          `}
         </div>
       </div>
       
@@ -2158,6 +2168,62 @@ document.addEventListener('click', () => {
   const menu = document.getElementById('adminDropdownMenu');
   if (menu) menu.classList.remove('show');
 });
+
+// CSV エクスポート
+window.exportWordsCSV = (wbId) => {
+  window.location.href = `/api/wordbooks/${wbId}/words/export`;
+};
+
+// CSV インポートモーダル
+window.openImportCSVModal = (wbId) => {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:480px">
+      <div class="modal-header">
+        <h2 style="font-size:18px">CSV インポート</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <div style="padding:16px">
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px">
+          1行目をヘッダー行（word,meaning）とするCSVファイルを選択してください。<br>
+          既存の単語はそのままで、新しい単語が追加されます。
+        </p>
+        <img src="/csv_explain.png" alt="CSVフォーマット説明" style="width:100%;border-radius:8px;border:1px solid var(--border-color);margin-bottom:16px">
+        <input type="file" id="csvFileInput" accept=".csv" style="display:block;margin-bottom:16px;color:var(--text-primary)">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn-primary" style="background:transparent;border:1px solid var(--border-color);color:var(--text-primary)" onclick="this.closest('.modal-overlay').remove()">キャンセル</button>
+          <button class="btn-primary" id="importExecuteBtn">インポート実行</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('importExecuteBtn').onclick = async () => {
+    const file = document.getElementById('csvFileInput').files[0];
+    if (!file) { alert('ファイルを選択してください'); return; }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target.result;
+        const result = await fetchAPI(`/wordbooks/${wbId}/words/import`, {
+          method: 'POST',
+          body: JSON.stringify({ content }),
+        });
+        overlay.remove();
+        alert(result.message);
+        const container = document.getElementById('app');
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        renderWordbookDetail(container, wbId, localStorage.token, user);
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+};
 
 // IPアクティビティログ表示
 window.showIpLogs = async (userId, username) => {
