@@ -33,6 +33,14 @@ const router = async () => {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderHomeFeed(layout.querySelector('.main'), token, user);
+  } else if (hash === '#/bookmarks') {
+    if (!user) {
+      window.location.hash = '#/';
+      return;
+    }
+    const layout = createLayout(user);
+    appDiv.appendChild(layout);
+    await renderBookmarkedFeed(layout.querySelector('.main'), token, user);
   } else if (hash.startsWith('#/wordbook/')) {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
@@ -75,14 +83,15 @@ const router = async () => {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderNotifications(layout.querySelector('.main'));
-  } else if (hash === '#/admin') {
+  } else if (hash.startsWith('#/admin')) {
     if (!user || !user.is_admin) {
       window.location.hash = '#/';
       return;
     }
     const layout = createLayout(user);
     appDiv.appendChild(layout);
-    await renderAdminDashboard(layout.querySelector('.main'));
+    const subRoute = hash.split('/')[2] || 'stats';
+    await renderAdminDashboard(layout.querySelector('.main'), subRoute);
   } else if (hash === '#/terms') {
     renderTermsOfService(appDiv);
   } else if (hash === '#/privacy') {
@@ -221,6 +230,7 @@ function createLayout(user) {
           <span class="badge-unread" id="unreadBadge" style="display:none"></span>
         </a>
         <a href="#/profile" class="nav-link"><span class="material-icons">person</span> プロフィール</a>
+        <a href="#/bookmarks" class="nav-link"><span class="material-icons">bookmark</span> ブックマーク</a>
         <a href="#/settings" class="nav-link"><span class="material-icons">settings</span> 設定</a>
         ${user.is_admin ? '<a href="#/admin" class="nav-link" style="color: #f59e0b"><span class="material-icons">admin_panel_settings</span> 管理者</a>' : ''}
       </div>
@@ -484,7 +494,7 @@ async function renderHomeFeed(container, token, user) {
     </div>
     ${(!q && !tag && user) ? `
       <div class="home-tabs">
-        <div class="home-tab ${!followingOnly ? 'active' : ''}" onclick="window.location.hash='#/'">おすすめ</div>
+        <div class="home-tab ${!followingOnly ? 'active' : ''}" onclick="window.location.hash='#'/">おすすめ</div>
         <div class="home-tab ${followingOnly ? 'active' : ''}" onclick="window.location.hash='#/?following_only=true'">フォロー中</div>
       </div>
     ` : ''}
@@ -552,21 +562,38 @@ async function renderHomeFeed(container, token, user) {
         ${tagsHtml}
         <div class="card-stats">
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0}</span>
-          <span class="like-btn-home" data-wordbook-id="${wb.id}" style="cursor:pointer;display:flex;align-items:center;gap:4px">
-            <span class="material-icons like-icon-home" style="font-size:16px">favorite_border</span>
-            <span class="like-count-home">0</span>
-          </span>
+        </div>
+          <div style="display:flex; align-items:center; gap:4px; margin-left:-12px">
+          <div class="like-btn" data-wordbook-id="${wb.id}">
+            <span class="material-icons" style="font-size:16px">favorite_border</span>
+            <span class="like-count">0</span>
+          </div>
+          <div class="bookmark-btn" data-wordbook-id="${wb.id}" style="cursor:pointer; padding:6px; border-radius:50%; display:flex; align-items:center; transition: background-color 0.2s">
+            <span class="material-icons" style="font-size:16px; color:var(--text-secondary)">bookmark_border</span>
+          </div>
+          ${(user && wb.user_id !== user.id) ? `
+            <span class="material-icons report-icon" onclick="event.stopPropagation(); openReportModal({wordbook_id: ${wb.id}})" title="通報する" style="font-size:18px; color:var(--text-secondary); cursor:pointer; padding:6px; border-radius:50%; transition: background-color 0.2s">flag</span>
+          ` : ''}
         </div>
       `;
 
       // いいね情報を読み込む
-      const likeBtn = card.querySelector(`[data-wordbook-id="${wb.id}"]`);
+      const likeBtn = card.querySelector('.like-btn');
       if (likeBtn) {
         loadLikeInfo(wb.id, likeBtn);
-        // いいねボタンのクリックハンドラを設定
         likeBtn.onclick = (e) => {
           e.stopPropagation();
-          toggleLikeHome(wb.id, likeBtn);
+          toggleLike(wb.id, likeBtn);
+        };
+      }
+
+      // ブックマーク情報を読み込む
+      const bookmarkBtn = card.querySelector('.bookmark-btn');
+      if (bookmarkBtn) {
+        loadBookmarkInfo(wb.id, bookmarkBtn);
+        bookmarkBtn.onclick = (e) => {
+          e.stopPropagation();
+          toggleBookmark(wb.id, bookmarkBtn);
         };
       }
 
@@ -675,7 +702,7 @@ async function renderMyProfile(container, token, user) {
           <span style="cursor:pointer" onclick="viewFollowers(${me.id}, '${me.username}')"><strong>${me.followers_count || 0}</strong> フォロワー</span>
           <span style="cursor:pointer" onclick="viewFollowing(${me.id}, '${me.username}')"><strong>${me.following_count || 0}</strong> フォロー中</span>
         </div>
-        <div class="profile-meta">
+        <div class="profile-meta" style="display:flex; justify-content:space-between; align-items:center">
           <span><span class="material-icons" style="font-size:16px;vertical-align:text-bottom">calendar_today</span> ${new Date(me.created_at).toLocaleDateString('ja-JP')} に登録</span>
         </div>
       </div>
@@ -870,10 +897,18 @@ async function renderWordbookDetail(container, wbId, token, user) {
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">comment</span>${wb.comment_count || 0} コメント</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0} 閲覧</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">school</span>${wb.study_count || 0} 学習</span>
-          <span style="cursor:pointer" class="like-btn-detail" data-wordbook-id="${wb.id}">
-            <span class="material-icons like-icon-detail" style="vertical-align:middle;font-size:16px;margin-right:4px">favorite_border</span>
-            <span class="like-count-detail">0</span>
-          </span>
+        </div>
+        <div style="margin-bottom:16px; margin-left:-12px; display:flex; align-items:center; gap:8px">
+          <div class="like-btn" data-wordbook-id="${wb.id}">
+            <span class="material-icons" style="font-size:18px">favorite_border</span>
+            <span class="like-count">0</span>
+          </div>
+          <div class="bookmark-btn" data-wordbook-id="${wb.id}" style="cursor:pointer; padding:8px; border-radius:50%; display:flex; align-items:center;">
+            <span class="material-icons" style="font-size:20px; color:var(--text-secondary)">bookmark_border</span>
+          </div>
+          ${!isOwner && !isGuest ? `
+            <span class="material-icons report-icon" onclick="openReportModal({wordbook_id: ${wb.id}})" title="この単語帳を通報する" style="font-size:20px; color:var(--text-secondary); cursor:pointer; padding:8px; border-radius:50%; transition: background-color 0.2s">flag</span>
+          ` : ''}
         </div>
         <div style="display:flex; gap:12px; margin-bottom:8px; align-items:center; flex-wrap:wrap">
           ${isGuest ? `
@@ -881,8 +916,17 @@ async function renderWordbookDetail(container, wbId, token, user) {
               <span class="material-icons" style="vertical-align:middle;margin-right:8px">login</span>ログインして学習を始める
             </button>
           ` : `
-            ${words.length > 0 ? `<button class="btn-primary" onclick='startStudy(${wb.id}, ${JSON.stringify(words).replace(/'/g, "&#39;")})'><span class="material-icons" style="vertical-align:middle;margin-right:8px">school</span>学習を始める</button>` : ''}
-            <button class="btn-primary" style="background:transparent; border:1px solid var(--accent-color); color:var(--accent-color)" onclick="startMistakeStudy(${wb.id})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">replay</span>間違えた単語を復習</button>
+            ${words.length > 0 ? `<button class="btn-primary" onclick='startStudy(${wbId}, ${JSON.stringify(words).replace(/'/g, "&#39;")})'><span class="material-icons" style="vertical-align:middle;margin-right:8px">school</span>最初から学習</button>` : ''}
+            
+            ${(() => {
+        const saved = localStorage.getItem(`study_session_${wbId}`);
+        if (saved) {
+          return `<button class="btn-primary" style="background:var(--accent-color)" onclick="resumeStudy(${wbId})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">play_arrow</span>続きから再開</button>`;
+        }
+        return '';
+      })()}
+
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--accent-color); color:var(--accent-color)" onclick="startMistakeStudy(${wbId})"><span class="material-icons" style="vertical-align:middle;margin-right:8px">replay</span>間違えた単語を復習</button>
             
             <button id="toggleCompleteBtn" class="btn-primary" style="background:${wb.is_completed ? '#00ba7c' : 'transparent'}; border:1px solid ${wb.is_completed ? '#00ba7c' : 'var(--border-color)'}; color:${wb.is_completed ? 'white' : 'var(--text-secondary)'}">
               <span class="material-icons" style="vertical-align:middle;margin-right:8px">${wb.is_completed ? 'check_circle' : 'radio_button_unchecked'}</span>
@@ -1022,19 +1066,23 @@ async function renderWordbookDetail(container, wbId, token, user) {
     }
 
     // いいね情報を読み込む
-    const likeBtnDetail = document.querySelector(`[data-wordbook-id="${wb.id}"]`);
+    const likeBtnDetail = container.querySelector('.like-btn');
     if (likeBtnDetail) {
-      try {
-        loadLikeInfo(wb.id, likeBtnDetail);
+      loadLikeInfo(wb.id, likeBtnDetail);
+      likeBtnDetail.onclick = (e) => {
+        e.stopPropagation();
+        toggleLike(wb.id, likeBtnDetail);
+      };
+    }
 
-        // いいねボタンのクリックハンドラを設定
-        likeBtnDetail.onclick = (e) => {
-          e.stopPropagation();
-          toggleLikeDetail(wb.id, likeBtnDetail);
-        };
-      } catch (err) {
-        console.error('いいね情報の読み込みに失敗しました:', err);
-      }
+    // ブックマーク情報を読み込む
+    const bookmarkBtnDetail = container.querySelector('.bookmark-btn');
+    if (bookmarkBtnDetail) {
+      loadBookmarkInfo(wb.id, bookmarkBtnDetail);
+      bookmarkBtnDetail.onclick = (e) => {
+        e.stopPropagation();
+        toggleBookmark(wb.id, bookmarkBtnDetail);
+      };
     }
 
     // コメントフォーム
@@ -1267,15 +1315,47 @@ window.startMistakeStudy = async (wbId) => {
   }
 };
 
+// 続きから再開するためのヘルパー
+window.resumeStudy = (wbId) => {
+  const saved = localStorage.getItem(`study_session_${wbId}`);
+  if (!saved) return;
+  const state = JSON.parse(saved);
+  // オリジナルの単語リストと、保存された状態を渡す
+  window.startStudy(wbId, state.words, state.isReview, state);
+};
+
+window.closeStudyModal = (wbId, el) => {
+  if (el) el.closest('.study-modal').remove();
+  else {
+    const modal = document.querySelector('.study-modal');
+    if (modal) modal.remove();
+  }
+  // 背景のページ（単語帳詳細など）を再描画して、再開ボタンの状態を同期する
+  router();
+};
+
 // === 学習機能 (Study Mode) ===
-window.startStudy = (wbId, words, isReview = false) => {
+window.startStudy = (wbId, words, isReview = false, resumeState = null) => {
   if (!words || words.length === 0) return;
 
   // ラウンド状態
-  let currentWords = [...words]; // 今回の周回で解く単語
-  let roundWrongs = [];          // 今回の周回で間違えた単語をプール
-  let currentIndex = 0;          // 現在の周回内でのインデックス
+  const initialWordIds = resumeState ? resumeState.initialWordIds : words.map(w => w.id || w.word_id);
+  let currentWords = resumeState ? resumeState.currentWords : [...words]; // 今回の周回で解く単語
+  let roundWrongs = resumeState ? resumeState.roundWrongs : [];          // 今回の周回で間違えた単語をプール
+  let currentIndex = resumeState ? resumeState.currentIndex : 0;          // 現在の周回内でのインデックス
   let isFlipped = false;
+
+  const saveState = () => {
+    const state = {
+      initialWordIds,
+      currentWords,
+      roundWrongs,
+      currentIndex,
+      isReview,
+      words // オリジナルの単語リストも保存（再開時に必要）
+    };
+    localStorage.setItem(`study_session_${wbId}`, JSON.stringify(state));
+  };
 
   const modal = document.createElement('div');
   modal.className = 'study-modal';
@@ -1283,24 +1363,30 @@ window.startStudy = (wbId, words, isReview = false) => {
   const renderCard = () => {
     // 全問終了チェック
     if (currentIndex >= currentWords.length) {
+      // 1周（またはラウンド）が終わったので再開用ステートを一度消す
+      localStorage.removeItem(`study_session_${wbId}`);
+
       if (roundWrongs.length === 0) {
         // 完全クリアの場合のみ学習完了として記録
-        const wrongIds = roundWrongs.map(w => w.id || w.word_id);
         fetchAPI('/study/finish', {
           method: 'POST',
-          body: JSON.stringify({ wordbookId: wbId, wrongWordIds: wrongIds })
+          body: JSON.stringify({
+            wordbookId: wbId,
+            wrongWordIds: [], // 全てクリアしたので空
+            testedWordIds: initialWordIds
+          })
         }).catch(err => console.error('学習記録の保存に失敗:', err));
 
         // 完全クリア
         modal.innerHTML = `
             <div class="study-header">
               <h2 style="font-size:24px">クリア！</h2>
-              <button onclick="this.closest('.study-modal').remove()"><span class="material-icons" style="font-size:32px">close</span></button>
+              <button onclick="closeStudyModal(${wbId}, this)"><span class="material-icons" style="font-size:32px">close</span></button>
             </div>
             <div class="study-body">
               <span class="material-icons" style="font-size:80px; color:#00ba7c; margin-bottom:16px">celebration</span>
               <h1 style="margin-bottom:24px">すべての単語をマスターしました！</h1>
-              <button class="btn-primary" onclick="this.closest('.study-modal').remove()">一覧へ戻る</button>
+              <button class="btn-primary" onclick="closeStudyModal(${wbId}, this)">一覧へ戻る</button>
             </div>
           `;
       } else {
@@ -1308,7 +1394,7 @@ window.startStudy = (wbId, words, isReview = false) => {
         modal.innerHTML = `
             <div class="study-header">
               <h2 style="font-size:24px">ラウンド終了</h2>
-              <button onclick="this.closest('.study-modal').remove()"><span class="material-icons" style="font-size:32px">close</span></button>
+              <button onclick="closeStudyModal(${wbId}, this)"><span class="material-icons" style="font-size:32px">close</span></button>
             </div>
             <div class="study-body">
               <span class="material-icons" style="font-size:80px; color:var(--text-secondary); margin-bottom:16px">refresh</span>
@@ -1321,6 +1407,7 @@ window.startStudy = (wbId, words, isReview = false) => {
           currentWords = [...roundWrongs];
           roundWrongs = [];
           currentIndex = 0;
+          saveState();
           renderCard();
         };
       }
@@ -1334,7 +1421,7 @@ window.startStudy = (wbId, words, isReview = false) => {
     modal.innerHTML = `
         <div class="study-header">
           <h2 style="font-size:20px; color:var(--text-secondary)">学習中</h2>
-          <button onclick="this.closest('.study-modal').remove()"><span class="material-icons">close</span></button>
+          <button onclick="closeStudyModal(${wbId}, this)"><span class="material-icons">close</span></button>
         </div>
         <div class="study-body">
           <div class="study-progress">${currentIndex + 1} / ${currentWords.length}</div>
@@ -1372,11 +1459,13 @@ window.startStudy = (wbId, words, isReview = false) => {
         fetchAPI(`/study/mistakes/${wbId}/${w.id}`, { method: 'DELETE' }).catch(e => console.error(e));
       }
       currentIndex++;
+      saveState();
       renderCard();
     };
     modal.querySelector('#btnWrong').onclick = () => {
       roundWrongs.push(w);
       currentIndex++;
+      saveState();
       renderCard();
     };
   };
@@ -1434,17 +1523,22 @@ async function renderUserProfile(container, username, token) {
           <div class="avatar">
             ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.username.charAt(0).toUpperCase()}
           </div>
-          ${!isMe && me ? `
-            <button class="btn-primary" 
-                    id="followBtn" 
-                    style="background:${user.is_following ? 'transparent' : 'var(--accent-color)'}; 
-                           border:1px solid ${user.is_following ? 'var(--border-color)' : 'var(--accent-color)'}; 
-                           color:${user.is_following ? 'var(--text-primary)' : 'white'}"
-                    onclick="toggleFollow(${user.id}, this)">
-              ${user.is_following ? 'フォロー中' : 'フォローする'}
-            </button>
-          ` : ''}
-          ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
+          <div style="display:flex; gap:8px; align-items:center">
+            ${!isMe && me ? `
+              <button class="btn-sm" onclick="openReportModal({user_id: ${user.id}})" title="通報する" style="border-radius:50%; width:40px; height:40px; border:1px solid var(--border-color)">
+                <span class="material-icons" style="font-size:20px; color:var(--text-secondary)">flag</span>
+              </button>
+              <button class="btn-primary" 
+                      id="followBtn" 
+                      style="background:${user.is_following ? 'transparent' : 'var(--accent-color)'}; 
+                             border:1px solid ${user.is_following ? 'var(--border-color)' : 'var(--accent-color)'}; 
+                             color:${user.is_following ? 'var(--text-primary)' : 'white'}"
+                      onclick="toggleFollow(${user.id}, this)">
+                ${user.is_following ? 'フォロー中' : 'フォローする'}
+              </button>
+            ` : ''}
+            ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
+          </div>
         </div>
         <div class="profile-name">${user.username}</div>
         <div class="profile-handle">@${user.username}</div>
@@ -1570,125 +1664,173 @@ async function markAllNotificationsAsRead() {
 }
 
 // === 管理者ダッシュボード ===
-async function renderAdminDashboard(container) {
+async function renderAdminDashboard(container, tab = 'stats') {
   container.innerHTML = `
     <div class="header">
       <h2><span class="material-icons" style="vertical-align:middle;margin-right:8px;color:#f59e0b">admin_panel_settings</span>管理者ダッシュボード</h2>
     </div>
-    <div style="padding:16px">
-      <div id="adminStats" class="admin-stats-grid">
-        <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
-      </div>
-      <div style="margin-top:24px">
-        <h3 style="margin-bottom:16px">ユーザー管理</h3>
-        <div id="adminUserList"></div>
-      </div>
+    <div class="home-tabs">
+      <div class="home-tab ${tab === 'stats' ? 'active' : ''}" onclick="window.location.hash='#/admin/stats'">概要</div>
+      <div class="home-tab ${tab === 'users' ? 'active' : ''}" onclick="window.location.hash='#/admin/users'">ユーザー一覧</div>
+      <div class="home-tab ${tab === 'reports' ? 'active' : ''}" onclick="window.location.hash='#/admin/reports'">通報一覧</div>
+    </div>
+    <div id="adminContent" style="padding:16px">
+      <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
     </div>
   `;
 
-  try {
-    const [stats, users] = await Promise.all([
-      fetchAPI('/admin/stats'),
-      fetchAPI('/admin/users')
-    ]);
+  const content = document.getElementById('adminContent');
 
-    document.getElementById('adminStats').innerHTML = `
-      <div class="admin-stat-card">
-        <span class="material-icons" style="font-size:32px;color:var(--accent-color)">people</span>
-        <div class="stat-value">${stats.totalUsers}</div>
-        <div class="stat-label">総ユーザー数</div>
-      </div>
-      <div class="admin-stat-card">
-        <span class="material-icons" style="font-size:32px;color:#ef4444">block</span>
-        <div class="stat-value">${stats.bannedUsers}</div>
-        <div class="stat-label">BANユーザー</div>
-      </div>
-      <div class="admin-stat-card">
-        <span class="material-icons" style="font-size:32px;color:#10b981">menu_book</span>
-        <div class="stat-value">${stats.totalWordbooks}</div>
-        <div class="stat-label">総単語帳数</div>
-      </div>
-      <div class="admin-stat-card">
-        <span class="material-icons" style="font-size:32px;color:#f59e0b">warning</span>
-        <div class="stat-value">${stats.totalWarnings}</div>
-        <div class="stat-label">発行済み警告</div>
+  try {
+    if (tab === 'stats') {
+      await renderAdminStats(content);
+    } else if (tab === 'users') {
+      await renderAdminUsers(content);
+    } else if (tab === 'reports') {
+      await renderAdminReports(content);
+    }
+  } catch (err) {
+    content.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+  }
+}
+
+async function renderAdminStats(container) {
+  try {
+    const stats = await fetchAPI('/admin/stats');
+    container.innerHTML = `
+      <div id="adminStats" class="admin-stats-grid">
+        <div class="admin-stat-card">
+          <span class="material-icons" style="font-size:32px;color:var(--accent-color)">people</span>
+          <div class="stat-value">${stats.totalUsers}</div>
+          <div class="stat-label">総ユーザー数</div>
+        </div>
+        <div class="admin-stat-card">
+          <span class="material-icons" style="font-size:32px;color:#ef4444">block</span>
+          <div class="stat-value">${stats.bannedUsers}</div>
+          <div class="stat-label">BANユーザー</div>
+        </div>
+        <div class="admin-stat-card">
+          <span class="material-icons" style="font-size:32px;color:#10b981">menu_book</span>
+          <div class="stat-value">${stats.totalWordbooks}</div>
+          <div class="stat-label">総単語帳数</div>
+        </div>
+        <div class="admin-stat-card">
+          <span class="material-icons" style="font-size:32px;color:#f59e0b">warning</span>
+          <div class="stat-value">${stats.totalWarnings}</div>
+          <div class="stat-label">発行済み警告</div>
+        </div>
+        <div class="admin-stat-card">
+          <span class="material-icons" style="font-size:32px;color:#f4212e">flag</span>
+          <div class="stat-value">${stats.totalReports}</div>
+          <div class="stat-label">未対処の通報</div>
+        </div>
       </div>
     `;
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg">${err.message}</div>`;
+  }
+}
 
+async function renderAdminUsers(container) {
+  try {
+    const users = await fetchAPI('/admin/users');
+    container.innerHTML = `
+      <h3 style="margin-bottom:16px">ユーザー管理</h3>
+      <div id="adminUserList"></div>
+    `;
     const userList = document.getElementById('adminUserList');
     if (users.length === 0) {
-      userList.innerHTML = `<div style="padding:16px;color:var(--text-secondary)">ユーザーがいません。</div>`;
-      return;
-    }
-
-    userList.innerHTML = `
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>ユーザー名</th>
-            <th>登録IP</th>
-            <th>登録日</th>
-            <th>警告数</th>
-            <th>状態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="adminUserBody"></tbody>
-      </table>
-    `;
-
-    const tbody = document.getElementById('adminUserBody');
-    users.forEach(u => {
-      const d = new Date(u.created_at).toLocaleDateString('ja-JP');
-      const statusBadge = u.is_banned
-        ? '<span class="badge badge-banned">BAN</span>'
-        : u.is_admin
-          ? '<span class="badge badge-admin">管理者</span>'
-          : '<span class="badge badge-active">有効</span>';
-
-      const tr = document.createElement('tr');
-      const ipDisplay = u.registration_ip
-        ? `<span style="cursor:pointer;color:var(--accent-color)" onclick="showIpUsers('${u.registration_ip}')">${u.registration_ip}</span>`
-        : '-';
-      tr.innerHTML = `
-        <td>${u.id}</td>
-        <td>
-          <a href="#/user/${u.username}" style="color:var(--accent-color)">${u.username}</a>
-          <button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${u.username}')" title="IPログ">
-            <span class="material-icons" style="font-size:14px">history</span>
-          </button>
-        </td>
-        <td style="font-family:monospace;font-size:12px">${ipDisplay}</td>
-        <td>${d}</td>
-        <td>
-          <span style="cursor:pointer;color:var(--accent-color)" onclick="showWarnings(${u.id}, '${u.username}')">${u.warning_count}</span>
-        </td>
-        <td>${statusBadge}</td>
-        <td>
-          <div style="display:flex;gap:8px">
-            <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${u.username}')" title="警告">
-              <span class="material-icons" style="font-size:16px">warning</span>
-            </button>
-            ${!u.is_admin ? (u.is_banned
-          ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id})" title="BAN解除">
-                   <span class="material-icons" style="font-size:16px">lock_open</span>
-                 </button>`
-          : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN">
-                   <span class="material-icons" style="font-size:16px">block</span>
-                 </button>`
-        ) : ''}
-            ${!u.is_admin ? `<button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${u.username}')" title="削除">
-              <span class="material-icons" style="font-size:16px">delete</span>
-            </button>` : ''}
-          </div>
-        </td>
+      userList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">ユーザーがいません。</div>`;
+    } else {
+      let html = `
+        <div class="admin-table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>ユーザー</th>
+                <th>登録日 / IP</th>
+                <th>状態 / 警告</th>
+                <th>アクション</th>
+              </tr>
+            </thead>
+            <tbody>
       `;
-      tbody.appendChild(tr);
-    });
-
+      users.forEach(u => {
+        const d = new Date(u.created_at).toLocaleDateString('ja-JP');
+        const badge = u.is_admin ? '<span class="badge badge-admin">管理者</span>' : (u.is_banned ? '<span class="badge badge-banned">BAN中</span>' : '<span class="badge badge-active">有効</span>');
+        html += `
+          <tr>
+            <td>
+              <div style="font-weight:bold">@${u.username}</div>
+              <div style="font-size:11px;color:var(--text-secondary)">ID: ${u.id}</div>
+            </td>
+            <td>
+              <div>${d}</div>
+              <div style="font-size:11px;color:var(--text-secondary)">IP: <a href="javascript:void(0)" onclick="showIpUsers('${u.registration_ip}')" style="color:inherit;text-decoration:underline">${u.registration_ip}</a><button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${u.username}')" title="IP履歴"><span class="material-icons" style="font-size:14px">history</span></button></div>
+            </td>
+            <td>
+              <div>${badge}</div>
+              <div style="font-size:11px;color:var(--text-secondary)">警告: <a href="javascript:void(0)" onclick="showWarnings(${u.id}, '${u.username}')" style="color:inherit;text-decoration:underline">${u.warning_count}回</a></div>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px">
+                <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${u.username}')" title="警告送信"><span class="material-icons">warning</span></button>
+                ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${u.username}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN実行"><span class="material-icons">block</span></button>`}
+                <button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${u.username}')" title="完全削除"><span class="material-icons">delete</span></button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table></div>`;
+      userList.innerHTML = html;
+    }
   } catch (err) {
-    container.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
+    container.innerHTML = `<div class="error-msg">${err.message}</div>`;
+  }
+}
+
+async function renderAdminReports(container) {
+  try {
+    const reports = await fetchAPI('/admin/reports');
+    container.innerHTML = `
+      <h3 style="margin-bottom:16px">通報管理</h3>
+      <div id="adminReportList"></div>
+    `;
+    const reportList = document.getElementById('adminReportList');
+    if (reports.length === 0) {
+      reportList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">現在通報はありません</div>`;
+    } else {
+      let html = `
+        <div class="admin-table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>通報者</th>
+                <th>対象</th>
+                <th>内容</th>
+                <th>日時</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      reports.forEach(r => {
+        html += `
+          <tr>
+            <td>@${r.reporter_username}</td>
+            <td>
+              ${r.reported_user_username ? `ユーザー: @${r.reported_user_username}` : `単語帳: <a href="#/wordbook/${r.reported_wordbook_id}">${r.reported_wordbook_title}</a>`}
+            </td>
+            <td>${r.reason}</td>
+            <td>${new Date(r.created_at).toLocaleString('ja-JP')}</td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table></div>`;
+      reportList.innerHTML = html;
+    }
+  } catch (err) {
+    container.innerHTML = `<div class="error-msg">${err.message}</div>`;
   }
 }
 
@@ -1961,79 +2103,268 @@ window.showIpUsers = async (ip) => {
 };
 
 // === いいね機能 ===
+let isLikeProcessing = false;
+
 async function loadLikeInfo(wordbookId, likeBtn) {
   try {
     const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
-    const countSpan = likeBtn.querySelector('.like-count-home') || likeBtn.querySelector('.like-count-detail');
-    const icon = likeBtn.querySelector('.like-icon-home') || likeBtn.querySelector('.like-icon-detail');
+    const countSpan = likeBtn.querySelector('.like-count');
+    const icon = likeBtn.querySelector('.material-icons');
 
     if (countSpan) countSpan.textContent = likes.like_count;
 
-    if (likes.liked_by_current_user && icon) {
-      icon.textContent = 'favorite';
-      icon.style.color = 'var(--error-color)';
+    if (icon) {
+      if (likes.liked_by_current_user) {
+        icon.textContent = 'favorite';
+        likeBtn.classList.add('liked');
+      } else {
+        icon.textContent = 'favorite_border';
+        likeBtn.classList.remove('liked');
+      }
     }
   } catch (err) {
     console.error('いいね情報の読み込みに失敗しました:', err);
   }
 }
 
-async function toggleLikeHome(wordbookId, element) {
+async function toggleLike(wordbookId, element) {
   const token = localStorage.getItem('token');
   if (!token) {
     alert('ログインしてください');
     return;
   }
 
-  try {
-    const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
+  if (isLikeProcessing) return;
+  isLikeProcessing = true;
 
-    if (likes.liked_by_current_user) {
-      // いいねを取り消す
-      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
-        method: 'DELETE'
-      });
+  const icon = element.querySelector('.material-icons');
+  const countSpan = element.querySelector('.like-count');
+  const isCurrentlyLiked = element.classList.contains('liked');
+
+  // Optimistic UI Update
+  try {
+    if (isCurrentlyLiked) {
+      element.classList.remove('liked');
+      icon.textContent = 'favorite_border';
+      countSpan.textContent = Math.max(0, parseInt(countSpan.textContent) - 1);
     } else {
-      // いいねを追加
-      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
-        method: 'POST'
-      });
+      element.classList.add('liked');
+      icon.textContent = 'favorite';
+      countSpan.textContent = parseInt(countSpan.textContent) + 1;
     }
 
-    // いいね情報を再読み込み
-    loadLikeInfo(wordbookId, element);
+    if (isCurrentlyLiked) {
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, { method: 'DELETE' });
+    } else {
+      await fetchAPI(`/wordbooks/${wordbookId}/like`, { method: 'POST' });
+    }
   } catch (err) {
     alert(err.message);
+    // Rollback on error
+    loadLikeInfo(wordbookId, element);
+  } finally {
+    isLikeProcessing = false;
   }
 }
 
-async function toggleLikeDetail(wordbookId, element) {
+// === ブックマーク機能 ===
+let isBookmarkProcessing = false;
+
+async function loadBookmarkInfo(wordbookId, bookmarkBtn) {
+  try {
+    const res = await fetchAPI(`/wordbooks/${wordbookId}/bookmark-status`);
+    const icon = bookmarkBtn.querySelector('.material-icons');
+    if (icon) {
+      if (res.is_bookmarked) {
+        icon.textContent = 'bookmark';
+        icon.style.color = 'var(--accent-color)';
+        bookmarkBtn.classList.add('bookmarked');
+      } else {
+        icon.textContent = 'bookmark_border';
+        icon.style.color = 'var(--text-secondary)';
+        bookmarkBtn.classList.remove('bookmarked');
+      }
+    }
+  } catch (err) {
+    console.error('ブックマーク情報の読み込みに失敗しました:', err);
+  }
+}
+
+async function toggleBookmark(wordbookId, element) {
   const token = localStorage.getItem('token');
   if (!token) {
     alert('ログインしてください');
     return;
   }
 
-  try {
-    const likes = await fetchAPI(`/wordbooks/${wordbookId}/likes`);
+  if (isBookmarkProcessing) return;
+  isBookmarkProcessing = true;
 
-    if (likes.liked_by_current_user) {
-      // いいねを取り消す
-      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
-        method: 'DELETE'
-      });
+  const icon = element.querySelector('.material-icons');
+  const isBookmarked = element.classList.contains('bookmarked');
+
+  // Optimistic UI Update
+  try {
+    if (isBookmarked) {
+      element.classList.remove('bookmarked');
+      icon.textContent = 'bookmark_border';
+      icon.style.color = 'var(--text-secondary)';
     } else {
-      // いいねを追加
-      await fetchAPI(`/wordbooks/${wordbookId}/like`, {
-        method: 'POST'
-      });
+      element.classList.add('bookmarked');
+      icon.textContent = 'bookmark';
+      icon.style.color = 'var(--accent-color)';
     }
 
-    // いいね情報を再読み込み
-    loadLikeInfo(wordbookId, element);
+    if (isBookmarked) {
+      await fetchAPI(`/wordbooks/${wordbookId}/bookmark`, { method: 'DELETE' });
+    } else {
+      await fetchAPI(`/wordbooks/${wordbookId}/bookmark`, { method: 'POST' });
+    }
   } catch (err) {
     alert(err.message);
+    loadBookmarkInfo(wordbookId, element);
+  } finally {
+    isBookmarkProcessing = false;
   }
+}
+
+async function renderBookmarkedFeed(container, token, user) {
+  // フィルター状態
+  const bookmarkFilters = {
+    uncompleted: false,
+    unstudied: false,
+    mistakes: false
+  };
+
+  container.innerHTML = `
+    <div class="header">
+      <h2><span class="material-icons" style="vertical-align:middle;margin-right:8px;color:var(--accent-color)">bookmark</span>ブックマーク</h2>
+    </div>
+    <div class="filter-bar" style="padding:12px 16px; display:flex; gap:12px; border-bottom:1px solid var(--border-color); flex-wrap:wrap">
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
+        <input type="checkbox" id="filterUncompleted" style="display:none">
+        <span class="material-icons" style="font-size:16px">check_circle_outline</span> 未完了 (完了ボタン未)
+      </label>
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
+        <input type="checkbox" id="filterUnstudied" style="display:none">
+        <span class="material-icons" style="font-size:16px">history</span> 未学習 (一度も学習なし)
+      </label>
+      <label class="filter-label" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:16px; background:var(--bg-secondary); font-size:13px; transition:0.2s; border:1px solid var(--border-color); user-select:none">
+        <input type="checkbox" id="filterMistakes" style="display:none">
+        <span class="material-icons" style="font-size:16px">error_outline</span> 間違えあり (克服中)
+      </label>
+    </div>
+    <div id="feedList"></div>
+  `;
+
+  const renderFeed = async () => {
+    const feedList = document.getElementById('feedList');
+    if (!feedList) return;
+    feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>`;
+
+    try {
+      const params = new URLSearchParams();
+      if (bookmarkFilters.uncompleted) params.append('uncompleted', 'true');
+      if (bookmarkFilters.unstudied) params.append('unstudied', 'true');
+      if (bookmarkFilters.mistakes) params.append('mistakes', 'true');
+
+      const wordbooks = await fetchAPI(`/wordbooks/bookmarked?${params.toString()}`);
+      feedList.innerHTML = '';
+
+      if (wordbooks.length === 0) {
+        feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">条件に一致する単語帳はありません。</div>`;
+        return;
+      }
+
+      wordbooks.forEach(wb => {
+        const card = document.createElement('div');
+        card.className = 'feed-card';
+        card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
+
+        // タグ表示
+        const tags = wb.tags || [];
+        const tagsHtml = tags.length > 0 ? `
+          <div class="card-tags" onclick="event.stopPropagation()">
+            ${tags.map(t => `<a href="#/?tag=${encodeURIComponent(t)}" class="tag-chip">#${t}</a>`).join('')}
+          </div>
+        ` : '';
+
+        let completionBadge = wb.is_completed ? `
+          <div class="badge-completed" style="margin-left:auto">
+            <span class="material-icons" style="font-size:14px">check_circle</span>
+            完了
+          </div>
+        ` : '';
+
+        card.innerHTML = `
+          <div class="card-header">
+            <div class="avatar" style="width:24px; height:24px; font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">
+              ${wb.avatar_url ? `<img src="${wb.avatar_url}" alt="">` : wb.username.charAt(0).toUpperCase()}
+            </div>
+            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">${wb.username}</span>
+            ${completionBadge}
+          </div>
+          <h3 class="card-title">${wb.title}</h3>
+          ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+          ${tagsHtml}
+          <div class="card-stats">
+            <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">library_books</span>${wb.word_count || 0}</span>
+            <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px; margin-left:-12px">
+            <div class="like-btn" data-wordbook-id="${wb.id}">
+              <span class="material-icons" style="font-size:16px">favorite_border</span>
+              <span class="like-count">0</span>
+            </div>
+            <div class="bookmark-btn" data-wordbook-id="${wb.id}" style="cursor:pointer; padding:6px; border-radius:50%; display:flex; align-items:center; transition: background-color 0.2s">
+              <span class="material-icons" style="font-size:16px; color:var(--text-secondary)">bookmark_border</span>
+            </div>
+          </div>
+        `;
+
+        // 共通処理
+        const likeBtn = card.querySelector('.like-btn');
+        if (likeBtn) {
+          loadLikeInfo(wb.id, likeBtn);
+          likeBtn.onclick = (e) => { e.stopPropagation(); toggleLike(wb.id, likeBtn); };
+        }
+        const bookmarkBtn = card.querySelector('.bookmark-btn');
+        if (bookmarkBtn) {
+          loadBookmarkInfo(wb.id, bookmarkBtn);
+          bookmarkBtn.onclick = (e) => { e.stopPropagation(); toggleBookmark(wb.id, bookmarkBtn); };
+        }
+
+        feedList.appendChild(card);
+      });
+    } catch (err) {
+      feedList.innerHTML = `<div class="error-msg" style="padding:16px">${err.message}</div>`;
+    }
+  };
+
+  // イベント登録
+  const setupFilter = (id, key) => {
+    const el = document.getElementById(id);
+    const label = el.parentElement;
+    el.onchange = () => {
+      bookmarkFilters[key] = el.checked;
+      if (el.checked) {
+        label.style.background = 'rgba(59, 130, 246, 0.1)';
+        label.style.borderColor = 'var(--accent-color)';
+        label.style.color = 'var(--accent-color)';
+      } else {
+        label.style.background = 'var(--bg-secondary)';
+        label.style.borderColor = 'var(--border-color)';
+        label.style.color = 'var(--text-primary)';
+      }
+      renderFeed();
+    };
+  };
+
+  setupFilter('filterUncompleted', 'uncompleted');
+  setupFilter('filterUnstudied', 'unstudied');
+  setupFilter('filterMistakes', 'mistakes');
+
+  renderFeed();
 }
 
 // === 利用規約 ===
@@ -2299,4 +2630,53 @@ window.showUserListModal = (title, users) => {
     </div>
   `;
   document.body.appendChild(overlay);
+};
+
+// === 通報機能 ===
+window.openReportModal = ({ user_id, wordbook_id }) => {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width: 400px">
+      <div class="modal-header">
+        <h2 style="font-size:20px">通報する</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <p style="font-size:14px; color:var(--text-secondary); margin-bottom:16px">通報の理由を入力してください。</p>
+      <textarea id="reportReason" placeholder="例: 不適切なコンテンツ、誹謗中傷など" style="height:100px; margin-bottom:16px"></textarea>
+      <div id="reportError" class="error-msg" style="margin-bottom:12px"></div>
+      <button class="btn-primary btn-wide" onclick="submitReport(this, {user_id: ${user_id ? user_id : 'null'}, wordbook_id: ${wordbook_id ? wordbook_id : 'null'}})">送信する</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+};
+
+window.submitReport = async (btn, { user_id, wordbook_id }) => {
+  const reason = document.getElementById('reportReason').value.trim();
+  const errorDiv = document.getElementById('reportError');
+
+  if (!reason) {
+    errorDiv.textContent = '理由を入力してください';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  try {
+    await fetchAPI('/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        reported_user_id: user_id,
+        reported_wordbook_id: wordbook_id,
+        reason
+      })
+    });
+    alert('通報を送信しました。不適切なコンテンツの抑制にご協力いただきありがとうございます。');
+    btn.closest('.modal-overlay').remove();
+  } catch (err) {
+    errorDiv.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = '送信する';
+  }
 };

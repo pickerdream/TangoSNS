@@ -21,10 +21,26 @@ router.post('/finish', async (req, res) => {
             [req.user.id, wordbookId]
         );
 
-        // 2. 間違えた単語 (study_mistakes) を記録
+        // 2. この学習セッションで対象となった単語の間違い記録を一旦クリア (克服したものを含むため)
+        // もし testedWordIds が送られてきたらその範囲で、そうでなければ全単語対象
+        const { testedWordIds } = req.body;
+        if (testedWordIds && Array.isArray(testedWordIds) && testedWordIds.length > 0) {
+            await client.query(
+                'DELETE FROM study_mistakes WHERE user_id = $1 AND wordbook_id = $2 AND word_id = ANY($3)',
+                [req.user.id, wordbookId, testedWordIds]
+            );
+        } else if (!testedWordIds) {
+            // 後方互換性のため、もし testedWordIds がない場合は全削除しても良いが、安全のため何もしない or 全削除
+            // ユーザー要件的には「完了＝全正解」なので、一旦全削除でも機能する
+            await client.query(
+                'DELETE FROM study_mistakes WHERE user_id = $1 AND wordbook_id = $2',
+                [req.user.id, wordbookId]
+            );
+        }
+
+        // 3. 改めて今回間違えた単語 (wrongWordIds) を記録
         if (wrongWordIds && Array.isArray(wrongWordIds)) {
             for (const wordId of wrongWordIds) {
-                // 既に同じ単語を間違えている場合は無視 (ON CONFLICT DO NOTHING)
                 await client.query(
                     `INSERT INTO study_mistakes (user_id, wordbook_id, word_id) 
            VALUES ($1, $2, $3) 

@@ -25,3 +25,14 @@
 ## フロントエンドのUI操作 (`public/app.js`)
 - `renderWordbookDetail`: 単語帳のメタ情報、単語リスト、追加フォーム（所有者のみ）を動的に描画。
 - `openCreateModal`: モーダル経由での新規作成（タイトル・説明入力）。
+
+## ブックマーク機能とフィルタリング (`src/routes/wordbooks.js`)
+
+### ブックマーク一覧取得 (`GET /api/wordbooks/bookmarked`)
+ブックマークした単語帳の一覧を取得する際、以下のパラメータによる高度なフィルタリングに対応しています：
+- `uncompleted=true`: 完了ボタン（`wordbook_completions`）が押されていない単語帳を抽出。
+- `unstudied=true`: 一度も学習履歴（`study_history`）がない単語帳を抽出。
+- `mistakes=true`: 克服していない間違い（`study_mistakes`）が残っている単語帳を抽出。
+
+### UIの標準化
+- 単語帳のフィード表示には `.feed-card` クラスを統一して使用し、ホームフィード、ブックマーク、学習履歴で一貫した余白とデザインを提供します。

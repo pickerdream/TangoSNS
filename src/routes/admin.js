@@ -13,12 +13,14 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
     const bannedUsers = await db.query('SELECT COUNT(*) FROM users WHERE is_banned = true');
     const totalWordbooks = await db.query('SELECT COUNT(*) FROM wordbooks');
     const totalWarnings = await db.query('SELECT COUNT(*) FROM user_warnings');
+    const totalReports = await db.query('SELECT COUNT(*) FROM reports');
 
     res.json({
       totalUsers: parseInt(totalUsers.rows[0].count),
       bannedUsers: parseInt(bannedUsers.rows[0].count),
       totalWordbooks: parseInt(totalWordbooks.rows[0].count),
       totalWarnings: parseInt(totalWarnings.rows[0].count),
+      totalReports: parseInt(totalReports.rows[0].count),
     });
   } catch (err) {
     console.error(err);
@@ -238,6 +240,32 @@ router.delete('/users/:id', authenticate, requireAdmin, async (req, res) => {
 
     await db.query('DELETE FROM users WHERE id = $1', [id]);
     res.json({ message: 'ユーザーを削除しました' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * GET /api/admin/reports
+ * 通報一覧を取得
+ */
+router.get('/reports', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT 
+        r.id, r.reason, r.created_at,
+        u.username AS reporter_username,
+        ru.username AS reported_user_username,
+        rw.title AS reported_wordbook_title,
+        rw.id AS reported_wordbook_id
+      FROM reports r
+      JOIN users u ON u.id = r.reporter_id
+      LEFT JOIN users ru ON ru.id = r.reported_user_id
+      LEFT JOIN wordbooks rw ON rw.id = r.reported_wordbook_id
+      ORDER BY r.created_at DESC
+    `);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });

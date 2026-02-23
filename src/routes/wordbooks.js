@@ -127,6 +127,126 @@ router.post('/', authenticate, async (req, res) => {
  * GET /api/wordbooks/:id
  * 単語帳詳細取得（単語・コメント数も含む）
  */
+/**
+ * GET /api/wordbooks/bookmarked
+ * ブックマークした単語帳一覧を取得 (フィルタリング対応)
+ */
+router.get('/bookmarked', authenticate, async (req, res) => {
+    try {
+        const { uncompleted, unstudied, mistakes } = req.query;
+        const params = [req.user.id];
+        let query = `
+            SELECT w.*, u.username, u.avatar_url,
+                   (SELECT COUNT(*) FROM wordbook_likes WHERE wordbook_id = w.id) AS like_count,
+                   (SELECT COUNT(*) FROM words WHERE wordbook_id = w.id) AS word_count,
+                   EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed
+            FROM wordbooks w
+            JOIN users u ON u.id = w.user_id
+            JOIN wordbook_bookmarks b ON b.wordbook_id = w.id
+            WHERE b.user_id = $1
+        `;
+
+        if (uncompleted === 'true') {
+            query += ` AND NOT EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1)`;
+        }
+        if (unstudied === 'true') {
+            query += ` AND NOT EXISTS(SELECT 1 FROM study_history s WHERE s.wordbook_id = w.id AND s.user_id = $1)`;
+        }
+        if (mistakes === 'true') {
+            query += ` AND EXISTS(SELECT 1 FROM study_mistakes m WHERE m.wordbook_id = w.id AND m.user_id = $1)`;
+        }
+
+        query += ` ORDER BY b.created_at DESC`;
+
+        const result = await db.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * GET /api/wordbooks/:id/bookmark-status
+ * 単語帳のブックマーク状態を取得
+ */
+router.get('/:id/bookmark-status', async (req, res) => {
+    const { id } = req.params;
+    try {
+        let currentUserId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const jwt = require('jsonwebtoken');
+            try {
+                const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'tangosns_secret_key');
+                currentUserId = decoded.id;
+            } catch (e) { }
+        }
+
+        const result = await db.query(
+            'SELECT EXISTS(SELECT 1 FROM wordbook_bookmarks WHERE wordbook_id = $1 AND user_id = $2) AS is_bookmarked',
+            [id, currentUserId]
+        );
+
+        res.json({ is_bookmarked: !!currentUserId && result.rows[0].is_bookmarked });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * POST /api/wordbooks/:id/bookmark
+ * 単語帳をブックマークに追加
+ */
+router.post('/:id/bookmark', authenticate, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const wb = await db.query('SELECT id FROM wordbooks WHERE id = $1', [id]);
+        if (!wb.rows[0]) return res.status(404).json({ error: '単語帳が見つかりません' });
+
+        try {
+            await db.query(
+                'INSERT INTO wordbook_bookmarks (user_id, wordbook_id) VALUES ($1, $2)',
+                [req.user.id, id]
+            );
+            res.json({ message: 'ブックマークに追加しました' });
+        } catch (err) {
+            if (err.code === '23505') {
+                res.status(400).json({ error: 'すでにブックマークしています' });
+            } else {
+                throw err;
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
+/**
+ * DELETE /api/wordbooks/:id/bookmark
+ * 単語帳のブックマークを解除
+ */
+router.delete('/:id/bookmark', authenticate, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query(
+            'DELETE FROM wordbook_bookmarks WHERE user_id = $1 AND wordbook_id = $2',
+            [req.user.id, id]
+        );
+
+        if (result.rowCount === 0) {
+            res.status(400).json({ error: 'ブックマークしていません' });
+        } else {
+            res.json({ message: 'ブックマークを解除しました' });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    }
+});
+
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -430,5 +550,7 @@ router.get('/:id/likes', async (req, res) => {
         res.status(500).json({ error: 'サーバーエラーが発生しました' });
     }
 });
+
+
 
 module.exports = router;

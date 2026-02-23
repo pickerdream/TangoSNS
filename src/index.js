@@ -46,7 +46,9 @@ const notificationRoutes = require('./routes/notifications');
 app.use('/api/notifications', notificationRoutes);
 
 const adminRoutes = require('./routes/admin');
+const reportsRoutes = require('./routes/reports');
 app.use('/api/admin', adminRoutes);
+app.use('/api/reports', reportsRoutes);
 
 const tagRoutes = require('./routes/tags');
 app.use('/api/tags', tagRoutes);
