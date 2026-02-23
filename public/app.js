@@ -1,5 +1,25 @@
 const API_BASE = '/api';
 
+// XSS対策: HTMLエスケープ
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// XSS対策: avatar_url の javascript: プロトコル排除
+function safeAvatarUrl(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : null;
+  } catch { return null; }
+}
+
 // ホームタブ切り替え関数
 window.switchHomeTab = (tab) => {
   const newHash = tab === 'latest' ? '#/' : '#/?following_only=true';
@@ -252,11 +272,11 @@ function createLayout(user) {
       
       <div class="user-menu" onclick="window.location.hash='#/profile'">
         <div class="avatar">
-          ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.username.charAt(0).toUpperCase()}
+          ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml(user.username.charAt(0).toUpperCase())}
         </div>
         <div class="user-info">
-          <div class="user-name">${user.username}</div>
-          <div class="user-handle">@${user.username}</div>
+          <div class="user-name">${escapeHtml(user.username)}</div>
+          <div class="user-handle">@${escapeHtml(user.username)}</div>
         </div>
         <button onclick="event.stopPropagation(); logout()" title="ログアウト">
           <span class="material-icons">logout</span>
@@ -349,9 +369,9 @@ async function loadTrendingWordbooks() {
 
     container.innerHTML = wordbooks.map(wb =>
       `<div class="trending-word" onclick="window.location.hash='#/wordbook/${wb.id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
-        <div style="font-weight: 600; font-size: 14px;">${wb.title}</div>
-        <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${wb.description || '説明はありません'}</div>
-        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · @${wb.username}</div>
+        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(wb.title)}</div>
+        <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(wb.description || '説明はありません')}</div>
+        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · @${escapeHtml(wb.username)}</div>
       </div>`
     ).join('');
   } catch (e) {
@@ -589,16 +609,16 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
 
       card.innerHTML = `
         <div class="card-header">
-          <div class="avatar" style="width:24px;height:24px;font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">
-            ${wb.avatar_url ? `<img src="${wb.avatar_url}" alt="">` : wb.username.charAt(0).toUpperCase()}
+          <div class="avatar" style="width:24px;height:24px;font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
+            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
           </div>
-          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">${wb.username}</span>
+          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.username)}</span>
           <span>·</span>
           <span>${d}</span>
           ${completionBadge}
         </div>
-        <h3 class="card-title">${wb.title}</h3>
-        ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+        <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+        ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         ${tagsHtml}
         <div class="card-stats">
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0}</span>
@@ -814,12 +834,12 @@ async function renderMyProfile(container, token, user) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${me.username}</span>
+            <span class="card-author">${escapeHtml(me.username)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
-          <h3 class="card-title">${wb.title}</h3>
-          ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         `;
         list.appendChild(card);
       });
@@ -973,12 +993,12 @@ async function renderWordbookDetail(container, wbId, token, user) {
       </div>
       <div style="padding: 16px; border-bottom: 1px solid var(--border-color);">
         <div style="display:flex; gap:12px; align-items:center; margin-bottom:12px">
-          <div class="avatar" style="width:48px;height:48px;cursor:pointer" onclick="window.location.hash='#/user/${wb.username}'">
-            ${wb.avatar_url ? `<img src="${wb.avatar_url}" alt="">` : wb.username.charAt(0).toUpperCase()}
+          <div class="avatar" style="width:48px;height:48px;cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">
+            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
           </div>
           <div>
-            <h1 style="font-size:24px;">${wb.title}</h1>
-            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${wb.username}'">作成者: @${wb.username}</p>
+            <h1 style="font-size:24px;">${escapeHtml(wb.title)}</h1>
+            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: @${escapeHtml(wb.username)}</p>
           </div>
         </div>
         ${wb.tags && wb.tags.length > 0 ? `
@@ -986,10 +1006,10 @@ async function renderWordbookDetail(container, wbId, token, user) {
             ${wb.tags.map(t => `<a href="#/?tag=${encodeURIComponent(t.name)}" class="tag-chip">#${t.name}</a>`).join('')}
           </div>
         ` : ''}
-        <p style="margin-bottom:16px; white-space:pre-wrap">${wb.description || ''}</p>
+        <p style="margin-bottom:16px; white-space:pre-wrap">${escapeHtml(wb.description || '')}</p>
         ${wb.bio ? `<div style="padding:8px 12px; background:var(--bg-secondary); border-radius:8px; margin-bottom:16px; font-size:13px; color:var(--text-secondary)">
           <div style="font-weight:bold; margin-bottom:4px">作成者の自己紹介:</div>
-          <div>${wb.bio}</div>
+          <div>${escapeHtml(wb.bio)}</div>
         </div>` : ''}
         <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap; color:var(--text-secondary); font-size:14px;">
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">library_books</span>${wb.word_count || 0} 単語</span>
@@ -1113,8 +1133,8 @@ async function renderWordbookDetail(container, wbId, token, user) {
              </td>`
           : '';
         row.innerHTML = `
-          <td style="padding:12px; color:var(--text-primary)">${w.word}</td>
-          <td style="padding:12px; color:var(--text-primary)">${w.meaning}</td>
+          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(w.word)}</td>
+          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(w.meaning)}</td>
           ${statusCell}
           ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
         `;
@@ -1149,15 +1169,15 @@ async function renderWordbookDetail(container, wbId, token, user) {
       const isCmdOwner = user && c.user_id === user.id;
       cl.innerHTML += `
         <div style="padding:16px; border-bottom:1px solid var(--border-color); display:flex; gap:12px; align-items:flex-start">
-          <div class="avatar" style="width:32px; height:32px; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${c.username}'">
-            ${c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : c.username.charAt(0).toUpperCase()}
+          <div class="avatar" style="width:32px; height:32px; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">
+            ${safeAvatarUrl(c.avatar_url) ? `<img src="${safeAvatarUrl(c.avatar_url)}" alt="">` : escapeHtml(c.username.charAt(0).toUpperCase())}
           </div>
           <div style="flex:1">
             <div style="display:flex; justify-content:space-between; align-items:center">
-              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${c.username}'">${c.username}</span>
+              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">${escapeHtml(c.username)}</span>
               ${isCmdOwner ? `<button class="delete-btn" onclick="deleteComment(${wbId}, ${c.id})"><span class="material-icons" style="font-size:18px">delete</span></button>` : ''}
             </div>
-            <p style="margin-top:4px; white-space:pre-wrap">${c.comment}</p>
+            <p style="margin-top:4px; white-space:pre-wrap">${escapeHtml(c.comment)}</p>
           </div>
         </div>
       `;
@@ -1567,8 +1587,8 @@ window.startStudy = (wbId, words, isReview = false, resumeState = null) => {
           
           <div class="flashcard-container" id="fcContainer">
             <div class="flashcard" id="fcInner">
-              <div class="flashcard-face flashcard-front">${w.word}</div>
-              <div class="flashcard-face flashcard-back">${w.meaning}</div>
+              <div class="flashcard-face flashcard-front">${escapeHtml(w.word)}</div>
+              <div class="flashcard-face flashcard-back">${escapeHtml(w.meaning)}</div>
             </div>
           </div>
           
@@ -1636,13 +1656,13 @@ async function renderUserProfile(container, username, token) {
           <span class="material-icons">more_vert</span>
         </button>
         <div class="admin-dropdown-menu" id="adminDropdownMenu">
-          <button onclick="openWarnModal(${user.id}, '${user.username}')">
+          <button onclick="openWarnModal(${user.id}, '${escapeHtml(user.username)}')">
             <span class="material-icons">warning</span> 警告を送信
           </button>
-          <button onclick="openBanModal(${user.id}, '${user.username}')">
+          <button onclick="openBanModal(${user.id}, '${escapeHtml(user.username)}')">
             <span class="material-icons">block</span> BANする
           </button>
-          <button onclick="deleteUser(${user.id}, '${user.username}')" style="color:#dc2626">
+          <button onclick="deleteUser(${user.id}, '${escapeHtml(user.username)}')" style="color:#dc2626">
             <span class="material-icons">delete</span> ユーザーを削除
           </button>
         </div>
@@ -1652,7 +1672,7 @@ async function renderUserProfile(container, username, token) {
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
-        <h2>${user.username}</h2>
+        <h2>${escapeHtml(user.username)}</h2>
         <div style="margin-left:auto">${adminMenu}</div>
       </div>
       
@@ -1660,7 +1680,7 @@ async function renderUserProfile(container, username, token) {
         <div class="profile-banner"></div>
         <div class="profile-avatar-container">
           <div class="avatar">
-            ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.username.charAt(0).toUpperCase()}
+            ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml(user.username.charAt(0).toUpperCase())}
           </div>
           <div style="display:flex; gap:8px; align-items:center">
             ${!isMe && me ? `
@@ -1679,12 +1699,12 @@ async function renderUserProfile(container, username, token) {
             ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
           </div>
         </div>
-        <div class="profile-name">${user.username}</div>
-        <div class="profile-handle">@${user.username}</div>
-        <div class="profile-bio">${user.bio || '自己紹介はまだありません。'}</div>
+        <div class="profile-name">${escapeHtml(user.username)}</div>
+        <div class="profile-handle">@${escapeHtml(user.username)}</div>
+        <div class="profile-bio">${escapeHtml(user.bio || '自己紹介はまだありません。')}</div>
         <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
-          <span style="cursor:pointer" onclick="viewFollowers(${user.id}, '${user.username}')"><strong>${user.followers_count || 0}</strong> フォロワー</span>
-          <span style="cursor:pointer" onclick="viewFollowing(${user.id}, '${user.username}')"><strong>${user.following_count || 0}</strong> フォロー中</span>
+          <span style="cursor:pointer" onclick="viewFollowers(${user.id}, '${escapeHtml(user.username)}')"><strong>${user.followers_count || 0}</strong> フォロワー</span>
+          <span style="cursor:pointer" onclick="viewFollowing(${user.id}, '${escapeHtml(user.username)}')"><strong>${user.following_count || 0}</strong> フォロー中</span>
         </div>
         <div class="profile-meta">
           <span><span class="material-icons" style="font-size:16px;vertical-align:text-bottom">calendar_today</span> ${new Date(user.created_at).toLocaleDateString('ja-JP')} に登録</span>
@@ -1708,12 +1728,12 @@ async function renderUserProfile(container, username, token) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${user.username}</span>
+            <span class="card-author">${escapeHtml(user.username)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
-          <h3 class="card-title">${wb.title}</h3>
-          ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         `;
         list.appendChild(card);
       });
@@ -1762,7 +1782,7 @@ async function renderNotifications(container) {
         };
         item.innerHTML = `
           <div class="notification-content">
-            <div class="notification-message" style="color: var(--error-color); font-weight: bold;">${n.message}</div>
+            <div class="notification-message" style="color: var(--error-color); font-weight: bold;">${escapeHtml(n.message)}</div>
             <div class="notification-date">${d}</div>
             <div style="margin-top: 8px; color: var(--text-secondary); font-size: 12px;">確認するまで通知に残ります</div>
           </div>
@@ -1778,7 +1798,7 @@ async function renderNotifications(container) {
         };
         item.innerHTML = `
           <div class="notification-content">
-            <div class="notification-message">${n.message}</div>
+            <div class="notification-message">${escapeHtml(n.message)}</div>
             <div class="notification-date">${d}</div>
           </div>
           ${n.is_read ? '' : '<div class="notification-dot"></div>'}
@@ -1900,22 +1920,22 @@ async function renderAdminUsers(container) {
         html += `
           <tr>
             <td>
-              <div style="font-weight:bold">@${u.username}</div>
+              <div style="font-weight:bold">@${escapeHtml(u.username)}</div>
               <div style="font-size:11px;color:var(--text-secondary)">ID: ${u.id}</div>
             </td>
             <td>
               <div>${d}</div>
-              <div style="font-size:11px;color:var(--text-secondary)">IP: <a href="javascript:void(0)" onclick="showIpUsers('${u.registration_ip}')" style="color:inherit;text-decoration:underline">${u.registration_ip}</a><button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${u.username}')" title="IP履歴"><span class="material-icons" style="font-size:14px">history</span></button></div>
+              <div style="font-size:11px;color:var(--text-secondary)">IP: <a href="javascript:void(0)" onclick="showIpUsers('${escapeHtml(u.registration_ip)}')" style="color:inherit;text-decoration:underline">${escapeHtml(u.registration_ip)}</a><button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${escapeHtml(u.username)}')" title="IP履歴"><span class="material-icons" style="font-size:14px">history</span></button></div>
             </td>
             <td>
               <div>${badge}</div>
-              <div style="font-size:11px;color:var(--text-secondary)">警告: <a href="javascript:void(0)" onclick="showWarnings(${u.id}, '${u.username}')" style="color:inherit;text-decoration:underline">${u.warning_count}回</a></div>
+              <div style="font-size:11px;color:var(--text-secondary)">警告: <a href="javascript:void(0)" onclick="showWarnings(${u.id}, '${escapeHtml(u.username)}')" style="color:inherit;text-decoration:underline">${u.warning_count}回</a></div>
             </td>
             <td>
               <div style="display:flex;gap:4px">
-                <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${u.username}')" title="警告送信"><span class="material-icons">warning</span></button>
-                ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${u.username}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${u.username}')" title="BAN実行"><span class="material-icons">block</span></button>`}
-                <button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${u.username}')" title="完全削除"><span class="material-icons">delete</span></button>
+                <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${escapeHtml(u.username)}')" title="警告送信"><span class="material-icons">warning</span></button>
+                ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${escapeHtml(u.username)}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${escapeHtml(u.username)}')" title="BAN実行"><span class="material-icons">block</span></button>`}
+                <button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" title="完全削除"><span class="material-icons">delete</span></button>
               </div>
             </td>
           </tr>
@@ -1956,11 +1976,11 @@ async function renderAdminReports(container) {
       reports.forEach(r => {
         html += `
           <tr>
-            <td>@${r.reporter_username}</td>
+            <td>@${escapeHtml(r.reporter_username)}</td>
             <td>
-              ${r.reported_user_username ? `ユーザー: @${r.reported_user_username}` : `単語帳: <a href="#/wordbook/${r.reported_wordbook_id}">${r.reported_wordbook_title}</a>`}
+              ${r.reported_user_username ? `ユーザー: @${escapeHtml(r.reported_user_username)}` : `単語帳: <a href="#/wordbook/${r.reported_wordbook_id}">${escapeHtml(r.reported_wordbook_title)}</a>`}
             </td>
-            <td>${r.reason}</td>
+            <td>${escapeHtml(r.reason)}</td>
             <td>${new Date(r.created_at).toLocaleString('ja-JP')}</td>
           </tr>
         `;
@@ -2214,8 +2234,8 @@ window.showIpUsers = async (ip) => {
               ${users.map(u => `
                 <div style="padding:12px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center">
                   <div>
-                    <a href="#/user/${u.username}" style="color:var(--accent-color);font-weight:bold" 
-                       onclick="this.closest('.modal-overlay').remove()">@${u.username}</a>
+                    <a href="#/user/${escapeHtml(u.username)}" style="color:var(--accent-color);font-weight:bold"
+                       onclick="this.closest('.modal-overlay').remove()">@${escapeHtml(u.username)}</a>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                       登録: ${new Date(u.created_at).toLocaleDateString('ja-JP')} · アクティビティ: ${u.activity_count}回
                     </div>
@@ -2429,14 +2449,14 @@ async function renderBookmarkedFeed(container, token, user) {
 
         card.innerHTML = `
           <div class="card-header">
-            <div class="avatar" style="width:24px; height:24px; font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">
-              ${wb.avatar_url ? `<img src="${wb.avatar_url}" alt="">` : wb.username.charAt(0).toUpperCase()}
+            <div class="avatar" style="width:24px; height:24px; font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
+              ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
             </div>
-            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${wb.username}'">${wb.username}</span>
+            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.username)}</span>
             ${completionBadge}
           </div>
-          <h3 class="card-title">${wb.title}</h3>
-          ${wb.description ? `<p class="card-desc">${wb.description}</p>` : ''}
+          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
           ${tagsHtml}
           <div class="card-stats">
             <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">library_books</span>${wb.word_count || 0}</span>
@@ -2741,19 +2761,19 @@ window.showUserListModal = (title, users) => {
   overlay.innerHTML = `
     <div class="modal-content" style="max-width: 500px">
       <div class="modal-header">
-        <h2 style="font-size:20px">${title}</h2>
+        <h2 style="font-size:20px">${escapeHtml(title)}</h2>
         <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
       </div>
       <div class="user-list" style="max-height: 400px; overflow-y: auto; margin-top: 16px;">
         ${users.length === 0 ? '<div style="padding:16px; text-align:center; color:var(--text-secondary)">ユーザーがいません。</div>' : users.map(u => `
-          <div class="user-list-item" onclick="window.location.hash='#/user/${u.username}'; this.closest('.modal-overlay').remove()" style="display:flex; align-items:center; gap:12px; padding:12px; cursor:pointer; border-bottom:1px solid var(--border-color)">
+          <div class="user-list-item" onclick="window.location.hash='#/user/${escapeHtml(u.username)}'; this.closest('.modal-overlay').remove()" style="display:flex; align-items:center; gap:12px; padding:12px; cursor:pointer; border-bottom:1px solid var(--border-color)">
             <div class="avatar" style="width:40px; height:40px">
-              ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : u.username.charAt(0).toUpperCase()}
+              ${safeAvatarUrl(u.avatar_url) ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="">` : escapeHtml(u.username.charAt(0).toUpperCase())}
             </div>
             <div style="flex:1">
-              <div style="font-weight:bold">${u.username}</div>
-              <div style="font-size:12px; color:var(--text-secondary)">@${u.username}</div>
-              <div style="font-size:13px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${u.bio || ''}</div>
+              <div style="font-weight:bold">${escapeHtml(u.username)}</div>
+              <div style="font-size:12px; color:var(--text-secondary)">@${escapeHtml(u.username)}</div>
+              <div style="font-size:13px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${escapeHtml(u.bio || '')}</div>
             </div>
           </div>
         `).join('')}

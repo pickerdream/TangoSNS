@@ -65,6 +65,12 @@ router.post('/', authenticate, async (req, res) => {
     if (!word || !meaning) {
         return res.status(400).json({ error: '単語と意味は必須です' });
     }
+    if (word.length > 200) {
+        return res.status(400).json({ error: '単語は200文字以内にしてください' });
+    }
+    if (meaning.length > 500) {
+        return res.status(400).json({ error: '意味は500文字以内にしてください' });
+    }
     try {
         // 所有者確認
         const wb = await db.query('SELECT user_id FROM wordbooks WHERE id = $1', [id]);

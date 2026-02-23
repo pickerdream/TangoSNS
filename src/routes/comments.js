@@ -42,6 +42,9 @@ router.post('/', authenticate, async (req, res) => {
     if (!comment || !comment.trim()) {
         return res.status(400).json({ error: 'コメントは必須です' });
     }
+    if (comment.length > 1000) {
+        return res.status(400).json({ error: 'コメントは1000文字以内にしてください' });
+    }
     try {
         const wb = await db.query('SELECT id FROM wordbooks WHERE id = $1', [id]);
         if (!wb.rows[0]) {

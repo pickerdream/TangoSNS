@@ -17,8 +17,14 @@ router.post('/register', async (req, res) => {
     if (!username || !password) {
         return res.status(400).json({ error: 'ユーザー名とパスワードは必須です' });
     }
+    if (username.length > 30) {
+        return res.status(400).json({ error: 'ユーザー名は30文字以内にしてください' });
+    }
     if (password.length < 6) {
         return res.status(400).json({ error: 'パスワードは6文字以上にしてください' });
+    }
+    if (password.length > 128) {
+        return res.status(400).json({ error: 'パスワードは128文字以内にしてください' });
     }
 
     // IPアドレスとUser-Agentを取得
@@ -74,7 +80,7 @@ router.post('/login', async (req, res) => {
 
         // BANチェック
         if (user.is_banned) {
-            return res.status(403).json({ error: 'このアカウントはBANされています。理由: ' + (user.ban_reason || '規約違反') });
+            return res.status(403).json({ error: 'このアカウントは利用停止されています。詳細はお問い合わせください。' });
         }
 
         const valid = await bcrypt.compare(password, user.password);

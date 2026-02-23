@@ -1,7 +1,11 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tangosns_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET 環境変数が設定されていません。サーバーを終了します。');
+  process.exit(1);
+}
 
 /**
  * JWT認証ミドルウェア

@@ -97,6 +97,8 @@ router.get('/', async (req, res) => {
 router.post('/', authenticate, async (req, res) => {
     const { title, description, tags } = req.body;
     if (!title) return res.status(400).json({ error: 'タイトルは必須です' });
+    if (title.length > 100) return res.status(400).json({ error: 'タイトルは100文字以内にしてください' });
+    if (description && description.length > 1000) return res.status(400).json({ error: '説明は1000文字以内にしてください' });
 
     try {
         const result = await db.query(
@@ -398,6 +400,8 @@ router.put('/:id', authenticate, async (req, res) => {
     const { title, description, tags } = req.body;
 
     if (!title) return res.status(400).json({ error: 'タイトルは必須です' });
+    if (title.length > 100) return res.status(400).json({ error: 'タイトルは100文字以内にしてください' });
+    if (description && description.length > 1000) return res.status(400).json({ error: '説明は1000文字以内にしてください' });
 
     try {
         // 所有権の確認
