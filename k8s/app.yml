@@ -51,7 +51,6 @@ metadata:
   namespace: tangosns
 spec:
   type: NodePort
-  externalTrafficPolicy: Local
   selector:
     app: tangosns-app
   ports:
