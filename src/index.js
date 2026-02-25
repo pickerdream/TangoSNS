@@ -9,6 +9,9 @@ const commentRoutes = require('./routes/comments');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// リバースプロキシ経由の X-Forwarded-For を信頼する
+app.set('trust proxy', true);
+
 // ミドルウェア
 app.use(express.json());
 
