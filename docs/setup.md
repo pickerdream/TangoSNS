@@ -183,7 +183,24 @@ echo -n "your_jwt_secret_key" | base64
 
 出力された値で `k8s/secret.yml` の `PGPASSWORD` と `JWT_SECRET` を置き換えてください。
 
-### 3. マニフェストの適用
+### 3. NGINX Ingress Controller のインストール
+
+クライアントの実際のIPアドレスを取得するために、NGINX Ingress Controller を使用します。
+
+```bash
+# ベアメタル / kubeadm クラスタの場合
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/baremetal/deploy.yaml
+
+# Controller が起動するまで待機
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+Ingress Controller は `X-Forwarded-For` ヘッダーを自動的にセットするため、アプリはクライアントの実際のIPアドレスを取得できます。
+
+### 4. マニフェストの適用
 
 ```bash
 kubectl apply -f k8s/namespace.yml
@@ -191,9 +208,10 @@ kubectl apply -f k8s/configmap.yml
 kubectl apply -f k8s/secret.yml
 kubectl apply -f k8s/postgres.yml
 kubectl apply -f k8s/app.yml
+kubectl apply -f k8s/ingress.yml
 ```
 
-### 4. 動作確認
+### 5. 動作確認
 
 ```bash
 # Pod の状態を確認
@@ -202,11 +220,15 @@ kubectl get pods -n tangosns
 # アプリのログを確認
 kubectl logs -n tangosns -l app=tangosns-app
 
-# ポートフォワードでローカルアクセス
-kubectl port-forward -n tangosns svc/tangosns-app 3000:80
+# Ingress Controller の NodePort を確認
+kubectl get svc -n ingress-nginx
 ```
 
-`http://localhost:3000` でアクセスできます。
+Ingress Controller の HTTP 用 NodePort（`80:3xxxx/TCP` の部分）を確認し、任意のノードのIPでアクセスします:
+
+```
+http://<ノードIP>:<NodePort>
+```
 
 ### マニフェスト構成
 
@@ -216,7 +238,8 @@ kubectl port-forward -n tangosns svc/tangosns-app 3000:80
 | `configmap.yml` | 非機密の環境変数（DB接続先・ポートなど） |
 | `secret.yml` | 機密の環境変数（パスワード・JWT秘密鍵） |
 | `postgres.yml` | PostgreSQL の StatefulSet + Headless Service + PVC (1Gi) |
-| `app.yml` | アプリの Deployment (2レプリカ) + Service (80→3000) |
+| `app.yml` | アプリの Deployment (2レプリカ) + Service (ClusterIP) |
+| `ingress.yml` | NGINX Ingress ルーティング設定 |
 
 ---
 
