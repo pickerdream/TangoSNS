@@ -107,4 +107,111 @@ npm start
 
 ---
 
+## Docker での起動
+
+Docker Compose を使うと、PostgreSQL を含めた環境をワンコマンドで構築できます。
+
+### 前提条件
+
+- Docker および Docker Compose がインストール済みであること
+
+### 起動
+
+```bash
+docker compose up --build
+```
+
+初回はイメージのビルドと依存関係のインストールが行われます。PostgreSQL が起動した後、アプリコンテナがマイグレーションを自動実行してからサーバーが起動します。
+
+`http://localhost:3000` でアクセスできます。
+
+### 環境変数のカスタマイズ
+
+`docker-compose.yml` の `app.environment` セクションで設定できます。
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `JWT_SECRET` | `change-me-to-a-secure-random-string` | **必ず変更してください** |
+| `GOOGLE_CLIENT_ID` | （未設定） | Google認証を使う場合のみ設定 |
+| `PGPASSWORD` | `tangosns_pass` | DB パスワード（`db` サービスと合わせる） |
+
+### 停止・データ削除
+
+```bash
+# 停止（データは保持される）
+docker compose down
+
+# 停止 + DB データも削除
+docker compose down -v
+```
+
+---
+
+## Kubernetes へのデプロイ
+
+`k8s/` ディレクトリに Kubernetes マニフェストが用意されています。
+
+### 前提条件
+
+- `kubectl` が設定済みのクラスタに接続できること
+- アプリの Docker イメージがレジストリにプッシュされていること
+
+### 1. Docker イメージのビルドとプッシュ
+
+```bash
+docker build -t <your-registry>/tangosns:latest .
+docker push <your-registry>/tangosns:latest
+```
+
+`k8s/app.yml` の `image: tangosns:latest` を実際のレジストリURLに書き換えてください。
+
+### 2. Secret の設定
+
+`k8s/secret.yml` のプレースホルダーを実際の値に置き換えます。
+
+```bash
+# 値を base64 エンコード
+echo -n "your_secure_password" | base64
+echo -n "your_jwt_secret_key" | base64
+```
+
+出力された値で `k8s/secret.yml` の `PGPASSWORD` と `JWT_SECRET` を置き換えてください。
+
+### 3. マニフェストの適用
+
+```bash
+kubectl apply -f k8s/namespace.yml
+kubectl apply -f k8s/configmap.yml
+kubectl apply -f k8s/secret.yml
+kubectl apply -f k8s/postgres.yml
+kubectl apply -f k8s/app.yml
+```
+
+### 4. 動作確認
+
+```bash
+# Pod の状態を確認
+kubectl get pods -n tangosns
+
+# アプリのログを確認
+kubectl logs -n tangosns -l app=tangosns-app
+
+# ポートフォワードでローカルアクセス
+kubectl port-forward -n tangosns svc/tangosns-app 3000:80
+```
+
+`http://localhost:3000` でアクセスできます。
+
+### マニフェスト構成
+
+| ファイル | 内容 |
+|---------|------|
+| `namespace.yml` | `tangosns` 名前空間 |
+| `configmap.yml` | 非機密の環境変数（DB接続先・ポートなど） |
+| `secret.yml` | 機密の環境変数（パスワード・JWT秘密鍵） |
+| `postgres.yml` | PostgreSQL の StatefulSet + Headless Service + PVC (1Gi) |
+| `app.yml` | アプリの Deployment (2レプリカ) + Service (80→3000) |
+
+---
+
 [ホームへ戻る](./README.md)

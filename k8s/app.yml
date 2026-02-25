@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tangosns-app
+  namespace: tangosns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tangosns-app
+  template:
+    metadata:
+      labels:
+        app: tangosns-app
+    spec:
+      containers:
+        - name: app
+          image: tangosns:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: tangosns-config
+            - secretRef:
+                name: tangosns-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tangosns-app
+  namespace: tangosns
+spec:
+  selector:
+    app: tangosns-app
+  ports:
+    - port: 80
+      targetPort: 3000

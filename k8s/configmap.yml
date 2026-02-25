@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tangosns-config
+  namespace: tangosns
+data:
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGDATABASE: tangosns
+  PGUSER: tangosns_user
+  PORT: "3000"
