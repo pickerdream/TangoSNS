@@ -154,16 +154,22 @@ docker compose down -v
 ### 前提条件
 
 - `kubectl` が設定済みのクラスタに接続できること
-- アプリの Docker イメージがレジストリにプッシュされていること
 
-### 1. Docker イメージのビルドとプッシュ
+### 1. Docker イメージのビルド
 
 ```bash
-docker build -t <your-registry>/tangosns:latest .
-docker push <your-registry>/tangosns:latest
+docker build -t tangosns:latest .
 ```
 
-`k8s/app.yml` の `image: tangosns:latest` を実際のレジストリURLに書き換えてください。
+**Docker Desktop の Kubernetes** を使っている場合は、ローカルでビルドしたイメージがそのまま利用できるため push は不要です。
+
+リモートクラスタを使う場合は、レジストリにプッシュし、`k8s/app.yml` の `image` を書き換えてください:
+
+```bash
+docker build -t <レジストリURL>/tangosns:latest .
+docker push <レジストリURL>/tangosns:latest
+# レジストリURL例: docker.io/ユーザー名, ghcr.io/ユーザー名 など
+```
 
 ### 2. Secret の設定
 

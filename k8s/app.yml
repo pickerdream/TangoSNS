@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: tangosns:latest
+          image: kouta2133/tangosns:latest
           ports:
             - containerPort: 3000
           envFrom:
