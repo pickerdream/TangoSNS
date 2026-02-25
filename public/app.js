@@ -49,6 +49,7 @@ const router = async () => {
     hash !== '#/login' &&
     hash !== '#/register' &&
     hash !== '#/' &&
+    hash !== '#/feed' &&
     hash !== '#/terms' &&
     hash !== '#/privacy' &&
     !hash.startsWith('#/?') &&
@@ -63,7 +64,9 @@ const router = async () => {
     renderLogin(appDiv);
   } else if (hash === '#/register') {
     renderRegister(appDiv);
-  } else if (hash === '#/' || hash.startsWith('#/?')) {
+  } else if (hash === '#/' && !token) {
+    renderLanding(appDiv);
+  } else if (hash === '#/' || hash.startsWith('#/?') || hash === '#/feed') {
     const layout = createLayout(user);
     appDiv.appendChild(layout);
     await renderHomeFeed(layout.querySelector('.main'), token, user);
@@ -296,7 +299,7 @@ function createLayout(user) {
         </a>
         <p class="sidebar-description">単語帳を作成・共有できるソーシャル学習プラットフォームです。自分だけの単語帳を作り、他のユーザーと共有して一緒に学びましょう。</p>
         <div class="nav-links">
-          <a href="#/" class="nav-link"><span class="material-icons">home</span> ホーム</a>
+          <a href="#/feed" class="nav-link"><span class="material-icons">home</span> ホーム</a>
         </div>
         <a href="#/login" class="btn-primary btn-wide sidebar-btn" style="background:var(--accent-color)">
           <span class="material-icons" style="vertical-align:middle;margin-right:8px">login</span>ログイン
@@ -338,7 +341,7 @@ function createLayout(user) {
 
       <nav class="mobile-bottom-nav">
         <div class="mobile-bottom-nav-inner">
-          <a href="#/" class="mobile-nav-item"><span class="material-icons">home</span>ホーム</a>
+          <a href="#/feed" class="mobile-nav-item"><span class="material-icons">home</span>ホーム</a>
           <a href="#/login" class="mobile-nav-item"><span class="material-icons">login</span>ログイン</a>
           <a href="#/register" class="mobile-nav-item"><span class="material-icons">person_add</span>登録</a>
         </div>
@@ -544,9 +547,13 @@ function renderLanding(container) {
           <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
         </div>
         <p style="font-size: 15px; margin-bottom: 8px; color: var(--text-secondary)">まず確認してみたい方</p>
-        <a href="#/" class="btn-primary" style="text-align: center; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary);">
+        <a href="#/feed" class="btn-primary" style="text-align: center; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary);">
           <span class="material-icons" style="vertical-align:middle;margin-right:8px;font-size:18px">visibility</span>ホームを見る
         </a>
+      </div>
+      <div style="margin-top: 24px; text-align: center; font-size: 12px; color: var(--text-secondary)">
+        <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
+        <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
       </div>
     </div>
   `;
