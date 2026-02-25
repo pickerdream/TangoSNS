@@ -232,11 +232,17 @@ textarea:focus {
 }
 
 /* メインコンテンツ */
-.main {
+.main-wrapper {
   flex: 1;
   max-width: 600px;
   border-right: 1px solid var(--border-color);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
   padding-bottom: 200px;
   /* footer padding */
 }
@@ -1102,4 +1108,220 @@ textarea:focus {
 
 .profile-stats strong {
   color: var(--text-primary);
+}
+
+/* === モバイルボトムナビゲーション === */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-color);
+  border-top: 1px solid var(--border-color);
+  z-index: 50;
+  padding: 4px 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.mobile-bottom-nav-inner {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 10px;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-item.active {
+  color: var(--accent-color);
+}
+
+.mobile-nav-item .material-icons {
+  font-size: 24px;
+}
+
+.mobile-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  background-color: var(--error-color);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* モバイル検索バー（メインエリア上部） */
+.mobile-search-bar {
+  display: none;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-color);
+}
+
+/* === レスポンシブ: タブレット (右サイドバー非表示) === */
+@media (max-width: 1024px) {
+  .right-sidebar {
+    display: none;
+  }
+
+  .main-wrapper {
+    max-width: none;
+    flex: 1;
+  }
+
+  .mobile-search-bar {
+    display: block;
+  }
+}
+
+/* === レスポンシブ: スマートフォン (左サイドバー非表示、ボトムナビ表示) === */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
+
+  .layout {
+    flex-direction: column;
+  }
+
+  .main-wrapper {
+    max-width: none;
+    border-right: none;
+    min-height: calc(100vh - 56px);
+  }
+
+  .main {
+    padding-bottom: 80px;
+  }
+
+  .mobile-bottom-nav {
+    display: block;
+  }
+
+  /* ヘッダー調整 */
+  .header h2 {
+    font-size: 18px;
+  }
+
+  /* フィードカード調整 */
+  .feed-card {
+    padding: 12px;
+  }
+
+  .card-title {
+    font-size: 16px;
+  }
+
+  .card-stats {
+    gap: 16px;
+  }
+
+  /* プロフィール調整 */
+  .profile-avatar-container .avatar {
+    width: 80px;
+    height: 80px;
+    font-size: 32px;
+    border-width: 3px;
+  }
+
+  .profile-banner {
+    height: 100px;
+  }
+
+  .profile-name {
+    font-size: 18px;
+  }
+
+  .profile-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* モーダル調整 */
+  .modal-content {
+    margin: 8px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+  }
+
+  /* 学習モード調整 */
+  .flashcard-container {
+    max-width: 100%;
+    height: 200px;
+  }
+
+  .flashcard-face {
+    font-size: 24px;
+  }
+
+  .btn-judge {
+    width: 64px;
+    height: 64px;
+    font-size: 28px;
+  }
+
+  .study-actions {
+    gap: 16px;
+  }
+
+  /* 認証レイアウト調整 */
+  .auth-layout {
+    padding: 16px;
+  }
+
+  .auth-layout h1 {
+    font-size: 32px !important;
+  }
+
+  .auth-form {
+    padding: 24px;
+  }
+
+  /* 管理者テーブル調整 */
+  .admin-table {
+    font-size: 12px;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 8px 4px;
+  }
+
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .admin-stat-card .stat-value {
+    font-size: 24px;
+  }
+
+  /* 単語追加フォーム調整 */
+  .add-form {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ゲスト同意バナー: ボトムナビの上に表示 */
+  .guest-consent-banner {
+    bottom: 56px;
+  }
 }

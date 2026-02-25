@@ -54,7 +54,7 @@ router.delete('/:userId', authenticate, async (req, res) => {
 router.get('/:userId/followers', async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT u.id, u.username, u.avatar_url, u.bio
+            `SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio
              FROM users u
              JOIN follows f ON f.follower_id = u.id
              WHERE f.following_id = $1
@@ -75,7 +75,7 @@ router.get('/:userId/followers', async (req, res) => {
 router.get('/:userId/following', async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT u.id, u.username, u.avatar_url, u.bio
+            `SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio
              FROM users u
              JOIN follows f ON f.following_id = u.id
              WHERE f.follower_id = $1

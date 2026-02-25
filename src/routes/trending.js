@@ -11,7 +11,7 @@ router.get('/words', async (req, res) => {
         const result = await db.query(
             `SELECT w.id, w.word, w.meaning, w.view_count,
                     wb.title AS wordbook_title, wb.id AS wordbook_id,
-                    u.username,
+                    u.username, u.display_name,
                     COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = wb.id), 0) AS study_count
              FROM words w
              JOIN wordbooks wb ON w.wordbook_id = wb.id
@@ -34,7 +34,7 @@ router.get('/wordbooks', async (req, res) => {
     try {
         const result = await db.query(
             `SELECT wb.id, wb.title, wb.description, wb.view_count, wb.created_at,
-                    u.username, u.avatar_url,
+                    u.username, u.display_name, u.avatar_url,
                     COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = wb.id), 0) AS study_count
              FROM wordbooks wb
              JOIN users u ON wb.user_id = u.id

@@ -28,6 +28,7 @@ function escapeHtml(s) {
 |--------|------|
 | 単語帳タイトル | `wb.title` |
 | 単語帳説明 | `wb.description` |
+| 作成者表示名 | `wb.display_name` |
 | 作成者ユーザー名 | `wb.username` |
 | 作成者の自己紹介 | `wb.bio` |
 | 単語 | `w.word` |
@@ -35,7 +36,7 @@ function escapeHtml(s) {
 | コメント | `c.comment` |
 | コメント投稿者名 | `c.username` |
 | 通知メッセージ | `n.message` |
-| プロフィール名・bio | `user.username`, `user.bio` |
+| プロフィール表示名・bio | `user.display_name`, `user.bio` |
 | 通報理由（管理者画面） | `r.reason` |
 | 管理者画面ユーザー名 | `u.username` |
 
@@ -106,7 +107,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 | フィールド | 最小 | 最大 | ファイル |
 |-----------|------|------|---------|
-| ユーザー名 | 1文字 | 30文字 | `src/routes/auth.js` |
+| アカウントID (`username`) | 1文字 | 30文字 | `src/routes/auth.js` |
+| 表示名 (`display_name`) | 1文字 | 50文字 | `src/routes/auth.js` |
 | パスワード | 6文字 | 128文字 | `src/routes/auth.js` |
 | 単語帳タイトル | 1文字 | 100文字 | `src/routes/wordbooks.js` |
 | 単語帳説明 | 0文字 | 1000文字 | `src/routes/wordbooks.js` |
@@ -147,6 +149,22 @@ router.put('/:id/read', ...);   // 後
 ## SQLインジェクション
 
 **問題なし。** 全クエリでプレースホルダ（`$1, $2` 形式）を使用したパラメータ化クエリを実装しています。文字列結合によるクエリ構築は行っていません。
+
+---
+
+## Google認証のセキュリティ
+
+### IDトークンの検証
+
+Google認証では、フロントエンドから送信されたIDトークンをサーバー側で `google-auth-library` を使って検証しています。クライアントの自己申告を信用せず、Googleの公開鍵で署名を検証し、`audience` がサーバーの `GOOGLE_CLIENT_ID` と一致することを確認します。
+
+### パスワード未設定ユーザーの保護
+
+Googleのみで登録したユーザーは `password = NULL` です。パスワードログイン時に `bcrypt.compare(password, null)` が実行されないよう、NULLチェックを行い401を返します。
+
+### Google連携解除の安全策
+
+パスワード未設定のユーザーがGoogle連携を解除するとログイン手段がなくなるため、連携解除前にパスワード設定を必須としています。
 
 ---
 

@@ -131,6 +131,17 @@ const router = async () => {
   } else if (hash === '#/privacy') {
     renderPrivacyPolicy(appDiv);
   }
+
+  // モバイルボトムナビのアクティブ状態を更新
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.mobile-nav-item').forEach(item => {
+      const href = item.getAttribute('href');
+      if (!href) return;
+      const isActive = (href === '#/' && (hash === '#/' || hash.startsWith('#/?')))
+        || (href !== '#/' && hash.startsWith(href));
+      item.classList.toggle('active', isActive);
+    });
+  });
 };
 
 window.addEventListener('hashchange', router);
@@ -148,6 +159,87 @@ async function fetchAPI(url, options = {}) {
     throw new Error(err.error || 'リクエストに失敗しました');
   }
   return res.json();
+}
+
+// === Google OAuth ===
+let _googleClientId = null;
+
+async function getGoogleClientId() {
+  if (_googleClientId !== null) return _googleClientId;
+  try {
+    const config = await fetchAPI('/auth/config');
+    _googleClientId = config.googleClientId || false;
+  } catch {
+    _googleClientId = false;
+  }
+  return _googleClientId;
+}
+
+// Google GSI の initialize は1回だけ呼ぶ必要がある
+let _googleInitialized = false;
+let _googleCallbackMode = 'login'; // 'login' or 'link'
+
+function _googleDispatchCallback(response) {
+  if (_googleCallbackMode === 'link') {
+    handleGoogleLinkCredential(response);
+  } else {
+    handleGoogleCredential(response);
+  }
+}
+
+async function _ensureGoogleInitialized() {
+  const clientId = await getGoogleClientId();
+  if (!clientId) return false;
+
+  if (typeof google === 'undefined' || !google.accounts) {
+    console.warn('Google Identity Services library not loaded');
+    return false;
+  }
+
+  if (!_googleInitialized) {
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: _googleDispatchCallback,
+    });
+    _googleInitialized = true;
+  }
+  return true;
+}
+
+async function initGoogleButton(containerId) {
+  _googleCallbackMode = 'login';
+  if (!(await _ensureGoogleInitialized())) return;
+
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  google.accounts.id.renderButton(container, {
+    theme: 'outline',
+    size: 'large',
+    width: 300,
+    text: 'signin_with',
+    shape: 'pill',
+    locale: 'ja',
+  });
+}
+
+async function handleGoogleCredential(response) {
+  try {
+    const { user, token } = await fetchAPI('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    window.location.hash = '#/';
+  } catch (err) {
+    const errorEl = document.getElementById('errorMsg');
+    if (errorEl) {
+      errorEl.textContent = err.message;
+    } else {
+      alert(err.message);
+    }
+  }
 }
 
 // === テーマ適用 ===
@@ -177,14 +269,16 @@ async function updateUnreadBadge() {
     const notifications = await fetchAPI('/notifications');
     const unreadCount = notifications.filter(n => !n.is_read).length;
     const badge = document.getElementById('unreadBadge');
-    if (badge) {
+    const mobileBadge = document.getElementById('mobileUnreadBadge');
+    [badge, mobileBadge].forEach(b => {
+      if (!b) return;
       if (unreadCount > 0) {
-        badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
-        badge.style.display = 'flex';
+        b.textContent = unreadCount > 9 ? '9+' : unreadCount;
+        b.style.display = 'flex';
       } else {
-        badge.style.display = 'none';
+        b.style.display = 'none';
       }
-    }
+    });
   } catch (e) { }
 }
 
@@ -210,31 +304,44 @@ function createLayout(user) {
           <span class="material-icons" style="vertical-align:middle;margin-right:8px">person_add</span>登録
         </a>
       </div>
-      
-      <div class="main"></div>
+
+      <div class="main-wrapper">
+        <div class="mobile-search-bar">
+          <input type="text" class="search-box" placeholder="単語帳・ユーザーを検索..." onkeydown="handleSearch(event)">
+        </div>
+        <div class="main"></div>
+      </div>
 
       <div class="right-sidebar">
-        <input type="text" id="searchInput" class="search-box" placeholder="単語帳を検索..." onkeydown="handleSearch(event)">
-        
+        <input type="text" id="searchInput" class="search-box" placeholder="単語帳・ユーザーを検索..." onkeydown="handleSearch(event)">
+
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
           <h3 style="margin-bottom: 12px">急上昇</h3>
           <div id="trendingWordsList" class="trending-words">
             <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
           </div>
         </div>
-        
+
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
           <h3 style="margin-bottom: 12px">人気のタグ</h3>
           <div id="popularTagsList" class="popular-tags">
             <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
           </div>
         </div>
-        
+
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
           <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
           <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
         </div>
       </div>
+
+      <nav class="mobile-bottom-nav">
+        <div class="mobile-bottom-nav-inner">
+          <a href="#/" class="mobile-nav-item"><span class="material-icons">home</span>ホーム</a>
+          <a href="#/login" class="mobile-nav-item"><span class="material-icons">login</span>ログイン</a>
+          <a href="#/register" class="mobile-nav-item"><span class="material-icons">person_add</span>登録</a>
+        </div>
+      </nav>
     `;
 
     // 人気タグを非同期で取得
@@ -269,13 +376,13 @@ function createLayout(user) {
         ${user.is_admin ? '<a href="#/admin" class="nav-link" style="color: #f59e0b"><span class="material-icons">admin_panel_settings</span> 管理者</a>' : ''}
       </div>
       <button class="btn-primary btn-wide sidebar-btn" onclick="openCreateModal()">単語帳を作成</button>
-      
+
       <div class="user-menu" onclick="window.location.hash='#/profile'">
         <div class="avatar">
-          ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml(user.username.charAt(0).toUpperCase())}
+          ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml((user.display_name || user.username).charAt(0).toUpperCase())}
         </div>
         <div class="user-info">
-          <div class="user-name">${escapeHtml(user.username)}</div>
+          <div class="user-name">${escapeHtml(user.display_name || user.username)}</div>
           <div class="user-handle">@${escapeHtml(user.username)}</div>
         </div>
         <button onclick="event.stopPropagation(); logout()" title="ログアウト">
@@ -283,31 +390,49 @@ function createLayout(user) {
         </button>
       </div>
     </div>
-    
-    <div class="main"></div>
+
+    <div class="main-wrapper">
+      <div class="mobile-search-bar">
+        <input type="text" class="search-box" placeholder="単語帳・ユーザーを検索..." onkeydown="handleSearch(event)">
+      </div>
+      <div class="main"></div>
+    </div>
 
     <div class="right-sidebar">
-      <input type="text" id="searchInput" class="search-box" placeholder="単語帳を検索..." onkeydown="handleSearch(event)">
-      
+      <input type="text" id="searchInput" class="search-box" placeholder="単語帳・ユーザーを検索..." onkeydown="handleSearch(event)">
+
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
         <h3 style="margin-bottom: 12px">急上昇</h3>
         <div id="trendingWordsList" class="trending-words">
           <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
         </div>
       </div>
-      
+
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
         <h3 style="margin-bottom: 12px">人気のタグ</h3>
         <div id="popularTagsList" class="popular-tags">
           <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
         </div>
       </div>
-      
+
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px; text-align: center; font-size: 12px; color: var(--text-secondary)">
         <a href="#/terms" style="color:var(--accent-color); text-decoration:none; margin-right:12px">利用規約</a>
         <a href="#/privacy" style="color:var(--accent-color); text-decoration:none">プライバシーポリシー</a>
       </div>
     </div>
+
+    <nav class="mobile-bottom-nav">
+      <div class="mobile-bottom-nav-inner">
+        <a href="#/" class="mobile-nav-item"><span class="material-icons">home</span>ホーム</a>
+        <a href="#/notifications" class="mobile-nav-item">
+          <span class="material-icons">notifications</span>通知
+          <span class="mobile-nav-badge" id="mobileUnreadBadge" style="display:none"></span>
+        </a>
+        <a onclick="openCreateModal()" class="mobile-nav-item" style="cursor:pointer"><span class="material-icons">add_circle</span>作成</a>
+        <a href="#/bookmarks" class="mobile-nav-item"><span class="material-icons">bookmark</span>保存済</a>
+        <a href="#/profile" class="mobile-nav-item"><span class="material-icons">person</span>マイページ</a>
+      </div>
+    </nav>
   `;
 
   // 人気タグを非同期で取得
@@ -371,7 +496,7 @@ async function loadTrendingWordbooks() {
       `<div class="trending-word" onclick="window.location.hash='#/wordbook/${wb.id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
         <div style="font-weight: 600; font-size: 14px;">${escapeHtml(wb.title)}</div>
         <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(wb.description || '説明はありません')}</div>
-        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · @${escapeHtml(wb.username)}</div>
+        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · ${escapeHtml(wb.display_name || wb.username)}</div>
       </div>`
     ).join('');
   } catch (e) {
@@ -433,10 +558,16 @@ function renderLogin(container) {
       <form class="auth-form" id="loginForm">
         <span class="material-icons" style="font-size: 40px; color: var(--accent-color); align-self: center">menu_book</span>
         <h1 style="text-align: center">TangoSNSにログイン</h1>
-        <input type="text" id="username" placeholder="ユーザー名" required>
+        <input type="text" id="username" placeholder="アカウントID" required>
         <input type="password" id="password" placeholder="パスワード" required>
         <button type="submit" class="btn-primary btn-wide">ログイン</button>
         <div id="errorMsg" class="error-msg"></div>
+        <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); margin: 8px 0;">
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+          または
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+        </div>
+        <div id="googleButtonContainer" style="display:flex; justify-content:center;"></div>
         <p style="text-align: center; font-size: 14px; margin-top: 16px;">
           アカウントをお持ちでない場合は <a href="#/register">登録</a>
         </p>
@@ -459,6 +590,8 @@ function renderLogin(container) {
       document.getElementById('errorMsg').textContent = err.message;
     }
   };
+
+  initGoogleButton('googleButtonContainer');
 }
 
 function renderRegister(container) {
@@ -467,7 +600,14 @@ function renderRegister(container) {
       <form class="auth-form" id="registerForm">
         <span class="material-icons" style="font-size: 40px; color: var(--accent-color); align-self: center">menu_book</span>
         <h1 style="text-align: center">アカウントを作成</h1>
-        <input type="text" id="username" placeholder="ユーザー名" required>
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">表示名</label>
+          <input type="text" id="display_name" placeholder="表示名" required>
+        </div>
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">アカウントID</label>
+          <input type="text" id="username" placeholder="アカウントID (半角英数字)" required pattern="[a-zA-Z0-9_]+" title="半角英数字とアンダースコアのみ使用できます">
+        </div>
         <input type="password" id="password" placeholder="パスワード (6文字以上)" required minlength="6">
         <div style="display:flex; align-items:center; gap:8px; margin:16px 0">
           <input type="checkbox" id="agreeTerms" required style="width:18px; height:18px; cursor:pointer">
@@ -478,6 +618,15 @@ function renderRegister(container) {
         </div>
         <button type="submit" class="btn-primary btn-wide">登録する</button>
         <div id="errorMsg" class="error-msg"></div>
+        <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); margin: 8px 0;">
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+          または
+          <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+        </div>
+        <div id="googleButtonContainer" style="display:flex; justify-content:center;"></div>
+        <p style="text-align: center; color: var(--text-secondary); font-size: 12px; margin-top: 4px;">
+          Googleでログインすることで、<a href="#/terms" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color)">利用規約</a>と<a href="#/privacy" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color)">プライバシーポリシー</a>に同意したものとみなされます。
+        </p>
         <p style="text-align: center; font-size: 14px; margin-top: 16px;">
           すでにアカウントをお持ちの場合は <a href="#/login">ログイン</a>
         </p>
@@ -487,6 +636,7 @@ function renderRegister(container) {
 
   document.getElementById('registerForm').onsubmit = async (e) => {
     e.preventDefault();
+    const display_name = e.target.display_name.value;
     const username = e.target.username.value;
     const password = e.target.password.value;
     const agreeTerms = document.getElementById('agreeTerms').checked;
@@ -498,7 +648,7 @@ function renderRegister(container) {
 
     try {
       const { user, token } = await fetchAPI('/auth/register', {
-        method: 'POST', body: JSON.stringify({ username, password })
+        method: 'POST', body: JSON.stringify({ username, password, display_name })
       });
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
@@ -507,6 +657,8 @@ function renderRegister(container) {
       document.getElementById('errorMsg').textContent = err.message;
     }
   };
+
+  initGoogleButton('googleButtonContainer');
 }
 
 // === ホームフィード ===
@@ -559,8 +711,42 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
       </select>
     </div>
     ` : ''}
+    <div id="userSearchResults"></div>
     <div id="feedList"></div>
   `;
+
+  // ユーザー検索（キーワード検索時のみ）
+  if (q) {
+    fetchAPI(`/users/search?q=${encodeURIComponent(q)}`).then(users => {
+      const el = document.getElementById('userSearchResults');
+      if (!el || users.length === 0) return;
+      const initialCount = 10;
+      const hasMore = users.length > initialCount;
+      const renderUserCard = (u) => `
+        <div class="feed-card" style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px"
+             onclick="window.location.hash='#/user/${escapeHtml(u.username)}'">
+          <div class="avatar" style="width:40px;height:40px;font-size:16px">
+            ${u.avatar_url ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : escapeHtml((u.display_name || u.username).charAt(0))}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:15px">${escapeHtml(u.display_name || u.username)}</div>
+            <div style="color:var(--text-secondary);font-size:13px">@${escapeHtml(u.username)}</div>
+          </div>
+          <div style="color:var(--text-secondary);font-size:12px">${u.followers_count} フォロワー</div>
+        </div>`;
+      el.innerHTML = `
+        <div style="padding:12px 16px 4px; font-size:13px; color:var(--text-secondary); font-weight:600">ユーザー (${users.length}件)</div>
+        <div style="border-bottom:1px solid var(--border-color)">
+          ${users.slice(0, initialCount).map(renderUserCard).join('')}
+          ${hasMore ? `<div id="userSearchMore" style="display:none">${users.slice(initialCount).map(renderUserCard).join('')}</div>
+          <div id="userSearchExpandBtn" style="padding:10px 16px; text-align:center; font-size:13px; color:var(--accent-color); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px"
+               onclick="document.getElementById('userSearchMore').style.display='block'; this.style.display='none'">
+            <span class="material-icons" style="font-size:18px">expand_more</span> 残り${users.length - initialCount}件を表示
+          </div>` : ''}
+        </div>
+      `;
+    }).catch(() => {});
+  }
 
   const renderFeed = async () => {
     try {
@@ -610,9 +796,9 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
       card.innerHTML = `
         <div class="card-header">
           <div class="avatar" style="width:24px;height:24px;font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
-            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
+            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
           </div>
-          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.username)}</span>
+          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}</span>
           <span>·</span>
           <span>${d}</span>
           ${completionBadge}
@@ -714,8 +900,53 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
   };
 }
 
-// === 設定 (テーマ・パスワード) ===
+// === 設定 (テーマ・パスワード・Google連携) ===
 async function renderSettings(container, token, user) {
+  // 最新のユーザー情報を取得
+  let hasPassword = true;
+  let hasGoogle = false;
+  try {
+    const me = await fetchAPI('/users/me');
+    hasPassword = me.has_password !== false;
+    hasGoogle = me.has_google === true;
+  } catch {}
+
+  // パスワードセクション
+  const passwordSection = hasPassword ? `
+          <div>
+            <label style="color:var(--text-secondary);font-size:14px">現在のパスワード (変更時のみ)</label>
+            <input type="password" id="currentPassword">
+          </div>
+          <div style="margin-top:16px">
+            <label style="color:var(--text-secondary);font-size:14px">新しいパスワード</label>
+            <input type="password" id="newPassword">
+          </div>` : `
+          <p style="color:var(--text-secondary); font-size:14px; margin-bottom:12px">パスワードを設定すると、ユーザー名とパスワードでもログインできるようになります。</p>
+          <div>
+            <label style="color:var(--text-secondary);font-size:14px">新しいパスワード (6文字以上)</label>
+            <input type="password" id="newPassword" minlength="6">
+          </div>`;
+
+  // Google連携セクション
+  const googleSection = hasGoogle ? `
+        <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border-color)">
+          <h3 style="margin-bottom:16px">Google連携</h3>
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="material-icons" style="color:#00ba7c">check_circle</span>
+              <span style="font-size:14px">Googleアカウント連携済み</span>
+            </div>
+            <button type="button" id="unlinkGoogleBtn" style="background:transparent; border:1px solid var(--border-color); color:var(--text-secondary); padding:6px 12px; border-radius:9999px; cursor:pointer; font-size:13px">連携を解除</button>
+          </div>
+          <div id="googleLinkMsg" style="font-size:13px; margin-top:8px"></div>
+        </div>` : `
+        <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border-color)">
+          <h3 style="margin-bottom:16px">Google連携</h3>
+          <p style="color:var(--text-secondary); font-size:14px; margin-bottom:12px">Googleアカウントを連携すると、Googleでもログインできるようになります。</p>
+          <div id="googleLinkButtonContainer" style="display:flex; justify-content:center;"></div>
+          <div id="googleLinkMsg" style="font-size:13px; margin-top:8px"></div>
+        </div>`;
+
   container.innerHTML = `
     <div class="header">
       <h2>設定</h2>
@@ -723,6 +954,18 @@ async function renderSettings(container, token, user) {
     <div style="padding: 24px;">
       <form id="settingsForm" style="display:flex; flex-direction:column; gap:16px;">
         <div>
+          <h3 style="margin-bottom:12px">プロフィール</h3>
+          <div style="margin-bottom:16px">
+            <label style="color:var(--text-secondary);font-size:14px">表示名</label>
+            <input type="text" id="settingsDisplayName" value="${escapeHtml(user.display_name || user.username)}" required>
+          </div>
+          <div>
+            <label style="color:var(--text-secondary);font-size:14px">アカウントID</label>
+            <input type="text" id="settingsUsername" value="${escapeHtml(user.username)}" required pattern="[a-zA-Z0-9_]+" title="半角英数字とアンダースコアのみ使用できます">
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:4px">半角英数字とアンダースコアのみ使用できます</div>
+          </div>
+        </div>
+        <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border-color)">
           <h3 style="margin-bottom:12px">一般</h3>
           <label style="color:var(--text-secondary);font-size:14px">テーマ設定</label>
           <select id="theme" style="width:100%; padding:10px; border-radius:4px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-color)">
@@ -732,17 +975,11 @@ async function renderSettings(container, token, user) {
           </select>
         </div>
         <div style="margin-top:24px; padding-top:24px; border-top:1px solid var(--border-color)">
-          <h3 style="margin-bottom:16px">セキュリティ</h3>
-          <div>
-            <label style="color:var(--text-secondary);font-size:14px">現在のパスワード (変更時のみ)</label>
-            <input type="password" id="currentPassword">
-          </div>
-          <div style="margin-top:16px">
-            <label style="color:var(--text-secondary);font-size:14px">新しいパスワード</label>
-            <input type="password" id="newPassword">
-          </div>
+          <h3 style="margin-bottom:16px">パスワード</h3>
+          ${passwordSection}
         </div>
-        
+        ${googleSection}
+
         <div style="display:flex; justify-content:flex-end; margin-top:16px">
           <button type="submit" class="btn-primary" style="width:fit-content">保存する</button>
         </div>
@@ -752,13 +989,18 @@ async function renderSettings(container, token, user) {
     </div>
   `;
 
+  // フォーム送信
   document.getElementById('settingsForm').onsubmit = async (e) => {
     e.preventDefault();
     const theme = e.target.theme.value;
-    const currentPassword = e.target.currentPassword.value;
-    const newPassword = e.target.newPassword.value;
+    const display_name = document.getElementById('settingsDisplayName').value;
+    const username = document.getElementById('settingsUsername').value;
+    const currentPasswordEl = document.getElementById('currentPassword');
+    const newPasswordEl = document.getElementById('newPassword');
+    const currentPassword = currentPasswordEl ? currentPasswordEl.value : '';
+    const newPassword = newPasswordEl ? newPasswordEl.value : '';
 
-    const payload = { ...user, theme };
+    const payload = { ...user, theme, display_name, username };
     if (newPassword) {
       payload.currentPassword = currentPassword;
       payload.newPassword = newPassword;
@@ -780,6 +1022,67 @@ async function renderSettings(container, token, user) {
       document.getElementById('settingsError').textContent = err.message;
     }
   };
+
+  // Google連携ボタン (未連携の場合)
+  if (!hasGoogle) {
+    initGoogleLinkButton('googleLinkButtonContainer');
+  }
+
+  // Google連携解除ボタン (連携済みの場合)
+  const unlinkBtn = document.getElementById('unlinkGoogleBtn');
+  if (unlinkBtn) {
+    unlinkBtn.onclick = async () => {
+      if (!confirm('Googleアカウントの連携を解除しますか？')) return;
+      const msgEl = document.getElementById('googleLinkMsg');
+      try {
+        const result = await fetchAPI('/auth/google/link', { method: 'DELETE' });
+        msgEl.style.color = '#00ba7c';
+        msgEl.textContent = result.message;
+        setTimeout(() => router(), 1500);
+      } catch (err) {
+        msgEl.style.color = 'var(--error-color)';
+        msgEl.textContent = err.message;
+      }
+    };
+  }
+}
+
+// Google連携用ボタン初期化 (設定ページ用)
+async function initGoogleLinkButton(containerId) {
+  _googleCallbackMode = 'link';
+  if (!(await _ensureGoogleInitialized())) return;
+
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  google.accounts.id.renderButton(container, {
+    theme: 'outline',
+    size: 'large',
+    width: 300,
+    text: 'signin_with',
+    shape: 'pill',
+    locale: 'ja',
+  });
+}
+
+async function handleGoogleLinkCredential(response) {
+  const msgEl = document.getElementById('googleLinkMsg');
+  try {
+    const result = await fetchAPI('/auth/google/link', {
+      method: 'POST',
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    if (msgEl) {
+      msgEl.style.color = '#00ba7c';
+      msgEl.textContent = result.message;
+    }
+    setTimeout(() => router(), 1500);
+  } catch (err) {
+    if (msgEl) {
+      msgEl.style.color = 'var(--error-color)';
+      msgEl.textContent = err.message;
+    }
+  }
 }
 
 // === マイプロフィール (閲覧用) ===
@@ -794,19 +1097,19 @@ async function renderMyProfile(container, token, user) {
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
-        <h2>${me.username}</h2>
+        <h2>${escapeHtml(me.display_name || me.username)}</h2>
       </div>
-      
+
       <div class="profile-header">
         <div class="profile-banner"></div>
         <div class="profile-avatar-container">
           <div class="avatar">
-            ${me.avatar_url ? `<img src="${me.avatar_url}" alt="">` : me.username.charAt(0).toUpperCase()}
+            ${me.avatar_url ? `<img src="${me.avatar_url}" alt="">` : escapeHtml((me.display_name || me.username).charAt(0).toUpperCase())}
           </div>
           <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>
         </div>
-        <div class="profile-name">${me.username}</div>
-        <div class="profile-handle">@${me.username}</div>
+        <div class="profile-name">${escapeHtml(me.display_name || me.username)}</div>
+        <div class="profile-handle">@${escapeHtml(me.username)}</div>
         <div class="profile-bio">${me.bio || '自己紹介はまだありません。'}</div>
         <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
           <span style="cursor:pointer" onclick="viewFollowers(${me.id}, '${me.username}')"><strong>${me.followers_count || 0}</strong> フォロワー</span>
@@ -834,7 +1137,7 @@ async function renderMyProfile(container, token, user) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${escapeHtml(me.username)}</span>
+            <span class="card-author">${escapeHtml(me.display_name || me.username)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
@@ -863,8 +1166,12 @@ window.openEditProfileModal = async () => {
       </div>
       <form id="editProfileForm" style="display:flex; flex-direction:column; gap:16px; padding-top:16px">
         <div>
-          <label style="color:var(--text-secondary);font-size:14px">ユーザー名</label>
-          <input type="text" id="username" value="${user.username}" required>
+          <label style="color:var(--text-secondary);font-size:14px">表示名</label>
+          <input type="text" id="display_name" value="${user.display_name || user.username}" required>
+        </div>
+        <div>
+          <label style="color:var(--text-secondary);font-size:14px">アカウントID</label>
+          <input type="text" id="username" value="${user.username}" required pattern="[a-zA-Z0-9_]+" title="半角英数字とアンダースコアのみ使用できます">
         </div>
         <div>
           <label style="color:var(--text-secondary);font-size:14px">アイコン画像のURL</label>
@@ -885,13 +1192,14 @@ window.openEditProfileModal = async () => {
 
   document.getElementById('editProfileForm').onsubmit = async (e) => {
     e.preventDefault();
+    const display_name = e.target.display_name.value;
     const username = e.target.username.value;
     const avatar_url = e.target.avatar_url.value;
     const bio = e.target.bio.value;
 
     try {
       const updatedUser = await fetchAPI('/users/me', {
-        method: 'PUT', body: JSON.stringify({ ...user, username, avatar_url, bio })
+        method: 'PUT', body: JSON.stringify({ ...user, display_name, username, avatar_url, bio })
       });
       localStorage.setItem('user', JSON.stringify(updatedUser));
       overlay.remove();
@@ -994,11 +1302,11 @@ async function renderWordbookDetail(container, wbId, token, user) {
       <div style="padding: 16px; border-bottom: 1px solid var(--border-color);">
         <div style="display:flex; gap:12px; align-items:center; margin-bottom:12px">
           <div class="avatar" style="width:48px;height:48px;cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">
-            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
+            ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
           </div>
           <div>
             <h1 style="font-size:24px;">${escapeHtml(wb.title)}</h1>
-            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: @${escapeHtml(wb.username)}</p>
+            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: ${escapeHtml(wb.display_name || wb.username)} (@${escapeHtml(wb.username)})</p>
           </div>
         </div>
         ${wb.tags && wb.tags.length > 0 ? `
@@ -1180,11 +1488,11 @@ async function renderWordbookDetail(container, wbId, token, user) {
       cl.innerHTML += `
         <div style="padding:16px; border-bottom:1px solid var(--border-color); display:flex; gap:12px; align-items:flex-start">
           <div class="avatar" style="width:32px; height:32px; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">
-            ${safeAvatarUrl(c.avatar_url) ? `<img src="${safeAvatarUrl(c.avatar_url)}" alt="">` : escapeHtml(c.username.charAt(0).toUpperCase())}
+            ${safeAvatarUrl(c.avatar_url) ? `<img src="${safeAvatarUrl(c.avatar_url)}" alt="">` : escapeHtml((c.display_name || c.username).charAt(0).toUpperCase())}
           </div>
           <div style="flex:1">
             <div style="display:flex; justify-content:space-between; align-items:center">
-              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">${escapeHtml(c.username)}</span>
+              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">${escapeHtml(c.display_name || c.username)}</span>
               ${isCmdOwner ? `<button class="delete-btn" onclick="deleteComment(${wbId}, ${c.id})"><span class="material-icons" style="font-size:18px">delete</span></button>` : ''}
             </div>
             <p style="margin-top:4px; white-space:pre-wrap">${escapeHtml(c.comment)}</p>
@@ -1427,7 +1735,7 @@ async function renderHistory(container) {
             ${completionBadge}
           </div>
           <h3 class="card-title">${h.title}</h3>
-          <p class="card-desc" style="font-size:14px">作成者: @${h.username}</p>
+          <p class="card-desc" style="font-size:14px">作成者: ${escapeHtml(h.display_name || h.username)} (@${escapeHtml(h.username)})</p>
           ${mistakesBadge}
         `;
         list.appendChild(card);
@@ -1666,10 +1974,10 @@ async function renderUserProfile(container, username, token) {
           <span class="material-icons">more_vert</span>
         </button>
         <div class="admin-dropdown-menu" id="adminDropdownMenu">
-          <button onclick="openWarnModal(${user.id}, '${escapeHtml(user.username)}')">
+          <button onclick="openWarnModal(${user.id}, '${escapeHtml(user.username)}', '${escapeHtml(user.display_name || user.username)}')">
             <span class="material-icons">warning</span> 警告を送信
           </button>
-          <button onclick="openBanModal(${user.id}, '${escapeHtml(user.username)}')">
+          <button onclick="openBanModal(${user.id}, '${escapeHtml(user.username)}', '${escapeHtml(user.display_name || user.username)}')">
             <span class="material-icons">block</span> BANする
           </button>
           <button onclick="deleteUser(${user.id}, '${escapeHtml(user.username)}')" style="color:#dc2626">
@@ -1682,15 +1990,15 @@ async function renderUserProfile(container, username, token) {
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
-        <h2>${escapeHtml(user.username)}</h2>
+        <h2>${escapeHtml(user.display_name || user.username)}</h2>
         <div style="margin-left:auto">${adminMenu}</div>
       </div>
-      
+
       <div class="profile-header">
         <div class="profile-banner"></div>
         <div class="profile-avatar-container">
           <div class="avatar">
-            ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml(user.username.charAt(0).toUpperCase())}
+            ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml((user.display_name || user.username).charAt(0).toUpperCase())}
           </div>
           <div style="display:flex; gap:8px; align-items:center">
             ${!isMe && me ? `
@@ -1709,7 +2017,7 @@ async function renderUserProfile(container, username, token) {
             ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
           </div>
         </div>
-        <div class="profile-name">${escapeHtml(user.username)}</div>
+        <div class="profile-name">${escapeHtml(user.display_name || user.username)}</div>
         <div class="profile-handle">@${escapeHtml(user.username)}</div>
         <div class="profile-bio">${escapeHtml(user.bio || '自己紹介はまだありません。')}</div>
         <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
@@ -1738,7 +2046,7 @@ async function renderUserProfile(container, username, token) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${escapeHtml(user.username)}</span>
+            <span class="card-author">${escapeHtml(user.display_name || user.username)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
@@ -1930,7 +2238,8 @@ async function renderAdminUsers(container) {
         html += `
           <tr>
             <td>
-              <div style="font-weight:bold">@${escapeHtml(u.username)}</div>
+              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}</div>
+              <div style="font-size:12px;color:var(--text-secondary)">@${escapeHtml(u.username)}</div>
               <div style="font-size:11px;color:var(--text-secondary)">ID: ${u.id}</div>
             </td>
             <td>
@@ -1943,8 +2252,8 @@ async function renderAdminUsers(container) {
             </td>
             <td>
               <div style="display:flex;gap:4px">
-                <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${escapeHtml(u.username)}')" title="警告送信"><span class="material-icons">warning</span></button>
-                ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${escapeHtml(u.username)}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${escapeHtml(u.username)}')" title="BAN実行"><span class="material-icons">block</span></button>`}
+                <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.display_name || u.username)}')" title="警告送信"><span class="material-icons">warning</span></button>
+                ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${escapeHtml(u.username)}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.display_name || u.username)}')" title="BAN実行"><span class="material-icons">block</span></button>`}
                 <button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" title="完全削除"><span class="material-icons">delete</span></button>
               </div>
             </td>
@@ -1986,9 +2295,9 @@ async function renderAdminReports(container) {
       reports.forEach(r => {
         html += `
           <tr>
-            <td>@${escapeHtml(r.reporter_username)}</td>
+            <td>${escapeHtml(r.reporter_display_name || r.reporter_username)} (@${escapeHtml(r.reporter_username)})</td>
             <td>
-              ${r.reported_user_username ? `ユーザー: @${escapeHtml(r.reported_user_username)}` : `単語帳: <a href="#/wordbook/${r.reported_wordbook_id}">${escapeHtml(r.reported_wordbook_title)}</a>`}
+              ${r.reported_user_username ? `ユーザー: ${escapeHtml(r.reported_user_display_name || r.reported_user_username)} (@${escapeHtml(r.reported_user_username)})` : `単語帳: <a href="#/wordbook/${r.reported_wordbook_id}">${escapeHtml(r.reported_wordbook_title)}</a>`}
             </td>
             <td>${escapeHtml(r.reason)}</td>
             <td>${new Date(r.created_at).toLocaleString('ja-JP')}</td>
@@ -2004,13 +2313,14 @@ async function renderAdminReports(container) {
 }
 
 // 警告モーダル
-window.openWarnModal = (userId, username) => {
+window.openWarnModal = (userId, username, displayName) => {
+  displayName = displayName || username;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
-        <h2 style="font-size:18px">@${username} に警告を送信</h2>
+        <h2 style="font-size:18px">${escapeHtml(displayName)} (@${escapeHtml(username)}) に警告を送信</h2>
         <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
       </div>
       <form id="warnForm" style="padding-top:16px">
@@ -2043,13 +2353,14 @@ window.openWarnModal = (userId, username) => {
 };
 
 // BANモーダル
-window.openBanModal = (userId, username) => {
+window.openBanModal = (userId, username, displayName) => {
+  displayName = displayName || username;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
-        <h2 style="font-size:18px">@${username} をBANする</h2>
+        <h2 style="font-size:18px">${escapeHtml(displayName)} (@${escapeHtml(username)}) をBANする</h2>
         <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
       </div>
       <form id="banForm" style="padding-top:16px">
@@ -2102,7 +2413,7 @@ window.showWarnings = async (userId, username) => {
     overlay.innerHTML = `
       <div class="modal-content" style="max-width:500px">
         <div class="modal-header">
-          <h2 style="font-size:18px">@${username} の警告履歴</h2>
+          <h2 style="font-size:18px">@${escapeHtml(username)} の警告履歴</h2>
           <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
         </div>
         <div style="padding-top:16px;max-height:400px;overflow-y:auto">
@@ -2235,7 +2546,7 @@ window.showIpLogs = async (userId, username) => {
     overlay.innerHTML = `
       <div class="modal-content" style="max-width:600px">
         <div class="modal-header">
-          <h2 style="font-size:18px">@${username} のIPアクティビティ</h2>
+          <h2 style="font-size:18px">@${escapeHtml(username)} のIPアクティビティ</h2>
           <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
         </div>
         <div style="padding-top:16px;max-height:400px;overflow-y:auto">
@@ -2302,7 +2613,7 @@ window.showIpUsers = async (ip) => {
                 <div style="padding:12px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center">
                   <div>
                     <a href="#/user/${escapeHtml(u.username)}" style="color:var(--accent-color);font-weight:bold"
-                       onclick="this.closest('.modal-overlay').remove()">@${escapeHtml(u.username)}</a>
+                       onclick="this.closest('.modal-overlay').remove()">${escapeHtml(u.display_name || u.username)} (@${escapeHtml(u.username)})</a>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                       登録: ${new Date(u.created_at).toLocaleDateString('ja-JP')} · アクティビティ: ${u.activity_count}回
                     </div>
@@ -2517,9 +2828,9 @@ async function renderBookmarkedFeed(container, token, user) {
         card.innerHTML = `
           <div class="card-header">
             <div class="avatar" style="width:24px; height:24px; font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
-              ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml(wb.username.charAt(0).toUpperCase())}
+              ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
             </div>
-            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.username)}</span>
+            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}</span>
             ${completionBadge}
           </div>
           <h3 class="card-title">${escapeHtml(wb.title)}</h3>
@@ -2835,10 +3146,10 @@ window.showUserListModal = (title, users) => {
         ${users.length === 0 ? '<div style="padding:16px; text-align:center; color:var(--text-secondary)">ユーザーがいません。</div>' : users.map(u => `
           <div class="user-list-item" onclick="window.location.hash='#/user/${escapeHtml(u.username)}'; this.closest('.modal-overlay').remove()" style="display:flex; align-items:center; gap:12px; padding:12px; cursor:pointer; border-bottom:1px solid var(--border-color)">
             <div class="avatar" style="width:40px; height:40px">
-              ${safeAvatarUrl(u.avatar_url) ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="">` : escapeHtml(u.username.charAt(0).toUpperCase())}
+              ${safeAvatarUrl(u.avatar_url) ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="">` : escapeHtml((u.display_name || u.username).charAt(0).toUpperCase())}
             </div>
             <div style="flex:1">
-              <div style="font-weight:bold">${escapeHtml(u.username)}</div>
+              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}</div>
               <div style="font-size:12px; color:var(--text-secondary)">@${escapeHtml(u.username)}</div>
               <div style="font-size:13px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${escapeHtml(u.bio || '')}</div>
             </div>

@@ -36,7 +36,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
   try {
     const result = await db.query(`
       SELECT 
-        u.id, u.username, u.created_at, u.registration_ip, 
+        u.id, u.username, u.display_name, u.created_at, u.registration_ip,
         u.is_admin, u.is_banned, u.ban_reason,
         COUNT(w.id) AS warning_count
       FROM users u
@@ -59,7 +59,7 @@ router.get('/users/:id/warnings', authenticate, requireAdmin, async (req, res) =
   const { id } = req.params;
   try {
     const result = await db.query(`
-      SELECT w.id, w.reason, w.created_at, a.username AS admin_username
+      SELECT w.id, w.reason, w.created_at, a.username AS admin_username, a.display_name AS admin_display_name
       FROM user_warnings w
       JOIN users a ON a.id = w.admin_id
       WHERE w.user_id = $1
@@ -204,7 +204,7 @@ router.get('/ip/:ip/users', authenticate, requireAdmin, async (req, res) => {
   const { ip } = req.params;
   try {
     const result = await db.query(`
-      SELECT DISTINCT u.id, u.username, u.created_at, u.is_banned,
+      SELECT DISTINCT u.id, u.username, u.display_name, u.created_at, u.is_banned,
              (SELECT COUNT(*) FROM user_ip_logs WHERE user_id = u.id AND ip_address = $1) AS activity_count
       FROM users u
       JOIN user_ip_logs l ON l.user_id = u.id
@@ -255,8 +255,8 @@ router.get('/reports', authenticate, requireAdmin, async (req, res) => {
     const result = await db.query(`
       SELECT 
         r.id, r.reason, r.created_at,
-        u.username AS reporter_username,
-        ru.username AS reported_user_username,
+        u.username AS reporter_username, u.display_name AS reporter_display_name,
+        ru.username AS reported_user_username, ru.display_name AS reported_user_display_name,
         rw.title AS reported_wordbook_title,
         rw.id AS reported_wordbook_id
       FROM reports r

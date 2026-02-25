@@ -75,7 +75,7 @@ router.get('/history', async (req, res) => {
         let query = `
         SELECT DISTINCT ON (h.wordbook_id) 
           h.wordbook_id, h.created_at as last_studied,
-          w.title, w.description, u.username,
+          w.title, w.description, u.username, u.display_name,
           (SELECT COUNT(*) FROM study_mistakes m WHERE m.user_id = h.user_id AND m.wordbook_id = h.wordbook_id) as mistakes_count,
           EXISTS(SELECT 1 FROM wordbook_completions comp WHERE comp.wordbook_id = h.wordbook_id AND comp.user_id = h.user_id) AS is_completed
         FROM study_history h
