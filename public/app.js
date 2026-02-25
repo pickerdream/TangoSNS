@@ -294,6 +294,7 @@ function createLayout(user) {
           <span class="material-icons">menu_book</span>
           TangoSNS
         </a>
+        <p class="sidebar-description">単語帳を作成・共有できるソーシャル学習プラットフォームです。自分だけの単語帳を作り、他のユーザーと共有して一緒に学びましょう。</p>
         <div class="nav-links">
           <a href="#/" class="nav-link"><span class="material-icons">home</span> ホーム</a>
         </div>

@@ -12,6 +12,14 @@ const port = process.env.PORT || 3000;
 // リバースプロキシ経由の X-Forwarded-For を信頼する
 app.set('trust proxy', true);
 
+// Cloudflare Tunnel 経由の場合、HTTP → HTTPS リダイレクト
+app.use((req, res, next) => {
+  if (req.headers['cf-connecting-ip'] && req.protocol === 'http') {
+    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  }
+  next();
+});
+
 // ミドルウェア
 app.use(express.json());
 
