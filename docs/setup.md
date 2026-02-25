@@ -243,4 +243,79 @@ http://<ノードIP>:<NodePort>
 
 ---
 
+## Cloudflare Tunnel での公開（任意）
+
+Cloudflare Tunnel を使うと、ポート開放なしでアプリをインターネットに公開できます。
+
+### 仕組み
+
+```
+クライアント → Cloudflare CDN → Cloudflare Tunnel (cloudflared) → Ingress / Service → アプリ Pod
+```
+
+Cloudflare は `CF-Connecting-IP` ヘッダーでクライアントの実際のIPアドレスを渡します。アプリはこのヘッダーを自動的に読み取るため、管理画面のIPログには正しいクライアントIPが記録されます。
+
+### IP取得の優先順位
+
+アプリは以下の優先順位でクライアントIPを判定します:
+
+1. `CF-Connecting-IP`（Cloudflare Tunnel 経由）
+2. `X-Forwarded-For`（NGINX Ingress 経由）
+3. `socket.remoteAddress`（直接接続）
+
+### セットアップ手順
+
+1. [Cloudflare Zero Trust ダッシュボード](https://one.dash.cloudflare.com/) でトンネルを作成
+2. `cloudflared` をクラスタ内にデプロイ（または外部ホストで実行）
+3. トンネルの接続先を Ingress Controller の Service に向ける:
+   ```
+   http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+   ```
+4. Cloudflare DNS でドメインをトンネルに紐付ける
+
+### Kubernetes で cloudflared を実行する場合
+
+Cloudflare ダッシュボードでトンネル作成時に表示されるトークンを使います:
+
+```bash
+kubectl -n tangosns create secret generic cloudflared-token \
+  --from-literal=token=<トンネルトークン>
+```
+
+```yaml
+# k8s/cloudflared.yml（例）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: tangosns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+```
+
+---
+
 [ホームへ戻る](./README.md)

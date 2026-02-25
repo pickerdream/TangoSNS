@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const db = require('../db');
+const { getClientIp } = require('../helpers');
 const { JWT_SECRET } = require('../middleware/auth');
 
 const router = express.Router();
@@ -40,7 +41,7 @@ router.post('/register', async (req, res) => {
     const finalDisplayName = display_name || username;
 
     // IPアドレス・ポート・User-Agentを取得
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const ip = getClientIp(req);
     const port = req.socket?.remotePort || null;
     const userAgent = req.headers['user-agent'] || null;
 
@@ -107,7 +108,7 @@ router.post('/login', async (req, res) => {
         }
 
         // IPアドレス・ポート・User-Agentを取得
-        const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+        const ip = getClientIp(req);
         const port = req.socket?.remotePort || null;
         const userAgent = req.headers['user-agent'] || null;
 
@@ -164,7 +165,7 @@ router.post('/google', async (req, res) => {
     }
 
     // IPアドレス・ポート・User-Agentを取得
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const ip = getClientIp(req);
     const port = req.socket?.remotePort || null;
     const userAgent = req.headers['user-agent'] || null;
 

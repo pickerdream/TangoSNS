@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
+const { getClientIp } = require('../helpers');
 
 /**
  * GET /api/wordbooks
@@ -277,7 +278,7 @@ router.get('/:id', async (req, res) => {
         }
 
         // IPアドレスとポートを取得
-        const clientIp = req.ip || req.connection.remoteAddress || '0.0.0.0';
+        const clientIp = getClientIp(req) || '0.0.0.0';
         const clientPort = req.connection.remotePort || 0;
 
         // ビュー数をカウント（同一ユーザーまたは同一IP:ポートの場合、1時間以上経過している場合のみ）
