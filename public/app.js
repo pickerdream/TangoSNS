@@ -147,6 +147,12 @@ const router = async () => {
   });
 };
 
+// パスベースURL（/wordbook/:id）をハッシュルートに変換（OGP共有リンク用）
+if (window.location.pathname.match(/^\/wordbook\/\d+$/)) {
+  const id = window.location.pathname.split('/')[2];
+  window.history.replaceState(null, '', '/#/wordbook/' + id);
+}
+
 window.addEventListener('hashchange', router);
 window.addEventListener('load', router);
 
