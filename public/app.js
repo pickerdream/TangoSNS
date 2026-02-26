@@ -150,6 +150,15 @@ const router = async () => {
 window.addEventListener('hashchange', router);
 window.addEventListener('load', router);
 
+// === 単語表示順（意味→単語 or 単語→意味） ===
+// reversed=true: 意味が先（デフォルト）、false: 単語が先
+function isWordOrderReversed() {
+  return localStorage.getItem('wordOrder') !== 'word-first';
+}
+function setWordOrderReversed(reversed) {
+  localStorage.setItem('wordOrder', reversed ? 'meaning-first' : 'word-first');
+}
+
 // === API クライアント ===
 async function fetchAPI(url, options = {}) {
   const token = localStorage.getItem('token');
@@ -158,10 +167,29 @@ async function fetchAPI(url, options = {}) {
 
   const res = await fetch(`${API_BASE}${url}`, { ...options, headers });
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      showSessionExpired();
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'リクエストに失敗しました');
   }
   return res.json();
+}
+
+function showSessionExpired() {
+  if (document.getElementById('sessionExpiredOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'sessionExpiredOverlay';
+  overlay.innerHTML = `
+    <div class="session-expired-backdrop"></div>
+    <div class="session-expired-dialog">
+      <span class="material-icons" style="font-size: 48px; color: var(--accent-color);">lock_clock</span>
+      <h2>セッションが切れました</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 24px;">再度ログインしてください。</p>
+      <button class="btn-primary btn-wide" onclick="logout()">ログアウトしてログイン画面へ</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
 }
 
 // === Google OAuth ===
@@ -1400,16 +1428,19 @@ async function renderWordbookDetail(container, wbId, token, user) {
       <div style="padding:16px; border-bottom:1px solid var(--border-color)">
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
           <h3 style="margin:0; flex:1">登録された単語</h3>
+          <button type="button" id="swapOrderBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px" title="表示順を入れ替え">
+            <span class="material-icons" style="vertical-align:middle; font-size:18px">swap_horiz</span>
+          </button>
           <button type="button" id="toggleWordsBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px">
             <span class="material-icons" style="vertical-align:middle; font-size:18px">expand_more</span>
           </button>
         </div>
-        
+
         <table style="width:100%; border-collapse:collapse; font-size:14px">
           <thead>
             <tr style="border-bottom:2px solid var(--border-color)">
-              <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">単語</th>
-              <th style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">意味</th>
+              <th id="thCol1" style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">${isWordOrderReversed() ? '意味' : '単語'}</th>
+              <th id="thCol2" style="text-align:left; padding:12px; font-weight:bold; color:var(--text-secondary)">${isWordOrderReversed() ? '単語' : '意味'}</th>
               ${!isGuest ? '<th style="text-align:center; padding:12px; font-weight:bold; color:var(--text-secondary); width:60px">状況</th>' : ''}
               ${isOwner ? '<th style="text-align:center; padding:12px; font-weight:bold; color:var(--text-secondary); width:50px">削除</th>' : ''}
             </tr>
@@ -1458,9 +1489,11 @@ async function renderWordbookDetail(container, wbId, token, user) {
                  : ''}
              </td>`
           : '';
+        const col1 = isWordOrderReversed() ? w.meaning : w.word;
+        const col2 = isWordOrderReversed() ? w.word : w.meaning;
         row.innerHTML = `
-          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(w.word)}</td>
-          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(w.meaning)}</td>
+          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col1)}</td>
+          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col2)}</td>
           ${statusCell}
           ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
         `;
@@ -1483,6 +1516,17 @@ async function renderWordbookDetail(container, wbId, token, user) {
       toggleWordsBtn.disabled = true;
       toggleWordsBtn.style.opacity = '0.5';
       toggleWordsBtn.style.cursor = 'not-allowed';
+    }
+
+    // 表示順切り替えボタン
+    const swapOrderBtn = document.getElementById('swapOrderBtn');
+    if (swapOrderBtn) {
+      swapOrderBtn.onclick = () => {
+        setWordOrderReversed(!isWordOrderReversed());
+        document.getElementById('thCol1').textContent = isWordOrderReversed() ? '意味' : '単語';
+        document.getElementById('thCol2').textContent = isWordOrderReversed() ? '単語' : '意味';
+        renderWordTable();
+      };
     }
 
     // 初期描画
@@ -1913,8 +1957,8 @@ window.startStudy = (wbId, words, isReview = false, resumeState = null) => {
           
           <div class="flashcard-container" id="fcContainer">
             <div class="flashcard" id="fcInner">
-              <div class="flashcard-face flashcard-front">${escapeHtml(w.word)}</div>
-              <div class="flashcard-face flashcard-back">${escapeHtml(w.meaning)}</div>
+              <div class="flashcard-face flashcard-front">${isWordOrderReversed() ? escapeHtml(w.meaning) : escapeHtml(w.word)}</div>
+              <div class="flashcard-face flashcard-back">${isWordOrderReversed() ? escapeHtml(w.word) : escapeHtml(w.meaning)}</div>
             </div>
           </div>
           

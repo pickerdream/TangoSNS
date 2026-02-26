@@ -241,6 +241,61 @@ http://<ノードIP>:<NodePort>
 | `app.yml` | アプリの Deployment (2レプリカ) + Service (ClusterIP) |
 | `ingress.yml` | NGINX Ingress ルーティング設定 |
 
+### 運用操作
+
+#### アプリの再起動
+
+Secret や ConfigMap を変更した場合、Pod を再起動して反映します:
+
+```bash
+kubectl rollout restart deployment tangosns-app -n tangosns
+```
+
+#### Docker イメージの更新
+
+コードを変更して新しいイメージをデプロイする場合:
+
+```bash
+# 1. ローカルでビルド＆プッシュ
+docker build -t kouta2133/tangosns:latest .
+docker push kouta2133/tangosns:latest
+
+# 2. Pod を再起動（最新イメージをプル）
+kubectl rollout restart deployment tangosns-app -n tangosns
+
+# 3. デプロイ状況を確認
+kubectl rollout status deployment tangosns-app -n tangosns
+```
+
+#### Secret の変更
+
+`k8s/secret.yml` を編集後:
+
+```bash
+kubectl apply -f k8s/secret.yml
+kubectl rollout restart deployment tangosns-app -n tangosns
+```
+
+`PGPASSWORD` を変更する場合は、PostgreSQL 側のパスワードも合わせて変更してください:
+
+```bash
+kubectl exec -it postgres-0 -n tangosns -- psql -U tangosns_user -d tangosns -c \
+  "ALTER USER tangosns_user PASSWORD 'new_password';"
+```
+
+#### ログの確認
+
+```bash
+# アプリのログ
+kubectl logs -n tangosns -l app=tangosns-app
+
+# PostgreSQL のログ
+kubectl logs -n tangosns postgres-0
+
+# リアルタイムで追跡
+kubectl logs -n tangosns -l app=tangosns-app -f
+```
+
 ---
 
 ## Cloudflare Tunnel での公開（任意）

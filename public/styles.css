@@ -1333,3 +1333,25 @@ textarea:focus {
     bottom: 56px;
   }
 }
+
+/* セッション切れダイアログ */
+.session-expired-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 9998;
+}
+
+.session-expired-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 40px;
+  text-align: center;
+  max-width: 360px;
+  width: 90%;
+}
