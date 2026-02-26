@@ -19,10 +19,11 @@ const indexHtmlTemplate = fs.readFileSync(indexHtmlPath, 'utf-8');
 // リバースプロキシ経由の X-Forwarded-For を信頼する
 app.set('trust proxy', true);
 
-// Cloudflare Tunnel 経由の場合、HTTP → HTTPS リダイレクト
-app.use((req, res, next) => {
-  if (req.headers['cf-connecting-ip'] && req.protocol === 'http') {
-    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+// Cloudflare Tunnel 経由: エッジ側で HTTPS を強制済みのためサーバー側リダイレクト不要
+// X-Forwarded-Proto を正しく設定し、リンク生成等で req.protocol が https を返すようにする
+app.use((req, _res, next) => {
+  if (req.headers['cf-connecting-ip']) {
+    req.headers['x-forwarded-proto'] = 'https';
   }
   next();
 });
