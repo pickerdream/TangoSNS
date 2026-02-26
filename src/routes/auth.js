@@ -48,7 +48,7 @@ router.post('/register', async (req, res) => {
     try {
         const hashed = await bcrypt.hash(password, 10);
         const result = await db.query(
-            'INSERT INTO users (username, display_name, password, registration_ip) VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, created_at, is_admin',
+            'INSERT INTO users (username, display_name, password, registration_ip) VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, created_at, is_admin, is_verified',
             [username, finalDisplayName, hashed, ip]
         );
         const user = result.rows[0];
@@ -61,7 +61,7 @@ router.post('/register', async (req, res) => {
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
         res.status(201).json({
-            user: { ...user, bio: null, avatar_url: null, theme: 'system', is_admin: user.is_admin },
+            user: { ...user, bio: null, avatar_url: null, theme: 'system', is_admin: user.is_admin, is_verified: user.is_verified },
             token
         });
     } catch (err) {
@@ -128,7 +128,8 @@ router.post('/login', async (req, res) => {
                 bio: user.bio,
                 theme: user.theme,
                 created_at: user.created_at,
-                is_admin: user.is_admin
+                is_admin: user.is_admin,
+                is_verified: user.is_verified
             },
             token,
         });
@@ -210,7 +211,7 @@ router.post('/google', async (req, res) => {
             result = await db.query(
                 `INSERT INTO users (username, display_name, password, google_id, avatar_url, registration_ip)
                  VALUES ($1, $2, NULL, $3, $4, $5)
-                 RETURNING id, username, display_name, avatar_url, bio, theme, created_at, is_admin`,
+                 RETURNING id, username, display_name, avatar_url, bio, theme, created_at, is_admin, is_verified`,
                 [username, displayName, googleId, googlePicture, ip]
             );
             user = result.rows[0];
@@ -238,7 +239,8 @@ router.post('/google', async (req, res) => {
                 bio: user.bio || null,
                 theme: user.theme || 'system',
                 created_at: user.created_at,
-                is_admin: user.is_admin
+                is_admin: user.is_admin,
+                is_verified: user.is_verified
             },
             token,
         });

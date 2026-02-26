@@ -1401,6 +1401,13 @@ textarea:focus {
 }
 
 /* モバイル用ログアウトボタン（デスクトップではサイドバーにあるため非表示） */
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
 .mobile-logout-btn {
   display: none;
 }

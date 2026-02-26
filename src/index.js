@@ -163,6 +163,9 @@ app.use('/api/wordbooks', wordbookRoutes);
 app.use('/api/wordbooks/:id/words', wordRoutes);
 app.use('/api/wordbooks/:id/comments', commentRoutes);
 
+const correctionRoutes = require('./routes/corrections');
+app.use('/api/wordbooks/:id/corrections', correctionRoutes);
+
 const studyRoutes = require('./routes/study');
 app.use('/api/study', studyRoutes);
 

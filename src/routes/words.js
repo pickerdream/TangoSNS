@@ -115,7 +115,11 @@ router.get('/', async (req, res) => {
             return res.status(404).json({ error: '単語帳が見つかりません' });
         }
         const result = await db.query(
-            'SELECT * FROM words WHERE wordbook_id = $1 ORDER BY created_at ASC',
+            `SELECT w.*,
+                    (SELECT COUNT(*) FROM word_corrections wc
+                     JOIN correction_proposals cp ON cp.id = wc.proposal_id
+                     WHERE wc.word_id = w.id AND cp.status = 'pending') AS pending_correction_count
+             FROM words w WHERE w.wordbook_id = $1 ORDER BY w.created_at ASC`,
             [id]
         );
         res.json(result.rows);

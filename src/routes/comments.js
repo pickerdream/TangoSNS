@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
         }
         const result = await db.query(
             `SELECT c.id, c.comment, c.created_at,
-                u.id AS user_id, u.username, u.display_name, u.avatar_url
+                u.id AS user_id, u.username, u.display_name, u.avatar_url, u.is_verified
          FROM comments c
          JOIN users u ON c.user_id = u.id
        WHERE c.wordbook_id = $1
@@ -59,7 +59,7 @@ router.post('/', authenticate, async (req, res) => {
         const row = result.rows[0];
 
         // コメント投稿者のユーザー情報を取得
-        const commenter = await db.query('SELECT username, display_name, avatar_url FROM users WHERE id = $1', [req.user.id]);
+        const commenter = await db.query('SELECT username, display_name, avatar_url, is_verified FROM users WHERE id = $1', [req.user.id]);
         const commenterUser = commenter.rows[0];
 
         // 単語帳の所有者が自分以外なら通知を作成
@@ -86,6 +86,7 @@ router.post('/', authenticate, async (req, res) => {
             username: commenterUser.username,
             display_name: commenterUser.display_name,
             avatar_url: commenterUser.avatar_url,
+            is_verified: commenterUser.is_verified,
         });
     } catch (err) {
         console.error(err);

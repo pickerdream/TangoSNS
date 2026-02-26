@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
 
         let query = `
       SELECT w.id, w.title, w.description, w.created_at, w.view_count,
-             u.id AS user_id, u.username, u.display_name, u.avatar_url,
+             u.id AS user_id, u.username, u.display_name, u.avatar_url, u.is_verified,
              EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed,
              COALESCE(
                (SELECT json_agg(json_build_object('id', t.id, 'name', t.name))
@@ -152,7 +152,7 @@ router.get('/bookmarked', authenticate, async (req, res) => {
         const { uncompleted, unstudied, mistakes } = req.query;
         const params = [req.user.id];
         let query = `
-            SELECT w.*, u.username, u.display_name, u.avatar_url,
+            SELECT w.*, u.username, u.display_name, u.avatar_url, u.is_verified,
                    (SELECT COUNT(*) FROM wordbook_likes WHERE wordbook_id = w.id) AS like_count,
                    (SELECT COUNT(*) FROM words WHERE wordbook_id = w.id) AS word_count,
                    EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed
@@ -362,7 +362,7 @@ router.get('/:id', async (req, res) => {
 
         // ユーザー情報、単語数、コメント数、学習回数を取得
         const detailsResult = await db.query(
-            `SELECT u.id AS user_id, u.username, u.display_name, u.avatar_url, u.bio,
+            `SELECT u.id AS user_id, u.username, u.display_name, u.avatar_url, u.bio, u.is_verified,
                     COUNT(DISTINCT wd.id) AS word_count,
                     COUNT(DISTINCT c.id)  AS comment_count,
                     COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = $1), 0) AS study_count,

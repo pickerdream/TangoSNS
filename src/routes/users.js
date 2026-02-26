@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/me', authenticate, async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT id, username, display_name, avatar_url, bio, theme, created_at,
+            `SELECT id, username, display_name, avatar_url, bio, theme, created_at, is_verified,
                     (password IS NOT NULL) AS has_password,
                     (google_id IS NOT NULL) AS has_google,
                     (SELECT COUNT(*) FROM follows WHERE following_id = users.id) AS followers_count,
@@ -115,7 +115,7 @@ router.get('/search', async (req, res) => {
 
     try {
         const result = await db.query(
-            `SELECT id, username, display_name, avatar_url, bio,
+            `SELECT id, username, display_name, avatar_url, bio, is_verified,
                     (SELECT COUNT(*) FROM follows WHERE following_id = users.id) AS followers_count
              FROM users
              WHERE username ILIKE $1 OR display_name ILIKE $1
@@ -150,7 +150,7 @@ router.get('/:username', async (req, res) => {
         }
 
         const userResult = await db.query(
-            `SELECT id, username, display_name, avatar_url, bio, created_at,
+            `SELECT id, username, display_name, avatar_url, bio, created_at, is_verified,
                     (SELECT COUNT(*) FROM follows WHERE following_id = users.id) AS followers_count,
                     (SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following_count,
                     EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND following_id = users.id) AS is_following

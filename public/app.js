@@ -17,6 +17,12 @@ function safeAvatarUrl(url) {
   } catch { return null; }
 }
 
+// 認証済みバッジヘルパー
+function verifiedBadge(user) {
+  if (!user || !user.is_verified) return '';
+  return '<span class="verified-badge" title="認証済み"><span class="material-icons" style="font-size:16px;color:#1d9bf0">verified</span></span>';
+}
+
 // ホームタブ切り替え関数
 window.switchHomeTab = (tab) => {
   const newHash = tab === 'latest' ? '#/' : '#/?following_only=true';
@@ -417,7 +423,7 @@ function createLayout(user) {
           ${safeAvatarUrl(user.avatar_url) ? `<img src="${safeAvatarUrl(user.avatar_url)}" alt="">` : escapeHtml((user.display_name || user.username).charAt(0).toUpperCase())}
         </div>
         <div class="user-info">
-          <div class="user-name">${escapeHtml(user.display_name || user.username)}</div>
+          <div class="user-name">${escapeHtml(user.display_name || user.username)}${verifiedBadge(user)}</div>
           <div class="user-handle">@${escapeHtml(user.username)}</div>
         </div>
         <button onclick="event.stopPropagation(); logout()" title="ログアウト">
@@ -531,7 +537,7 @@ async function loadTrendingWordbooks() {
       `<div class="trending-word" onclick="window.location.hash='#/wordbook/${wb.id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
         <div style="font-weight: 600; font-size: 14px;">${escapeHtml(wb.title)}</div>
         <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(wb.description || '説明はありません')}</div>
-        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · ${escapeHtml(wb.display_name || wb.username)}</div>
+        <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · ${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)}</div>
       </div>`
     ).join('');
   } catch (e) {
@@ -768,7 +774,7 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
             ${u.avatar_url ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : escapeHtml((u.display_name || u.username).charAt(0))}
           </div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:15px">${escapeHtml(u.display_name || u.username)}</div>
+            <div style="font-weight:600;font-size:15px">${escapeHtml(u.display_name || u.username)}${verifiedBadge(u)}</div>
             <div style="color:var(--text-secondary);font-size:13px">@${escapeHtml(u.username)}</div>
           </div>
           <div style="color:var(--text-secondary);font-size:12px">${u.followers_count} フォロワー</div>
@@ -837,7 +843,7 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
           <div class="avatar" style="width:24px;height:24px;font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
             ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
           </div>
-          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}</span>
+          <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)}</span>
           <span>·</span>
           <span>${d}</span>
           ${completionBadge}
@@ -1136,7 +1142,7 @@ async function renderMyProfile(container, token, user) {
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
-        <h2>${escapeHtml(me.display_name || me.username)}</h2>
+        <h2>${escapeHtml(me.display_name || me.username)}${verifiedBadge(me)}</h2>
       </div>
 
       <div class="profile-header">
@@ -1150,7 +1156,7 @@ async function renderMyProfile(container, token, user) {
             <button class="btn-primary mobile-logout-btn" style="background:transparent; border:1px solid var(--border-color); color:var(--error-color)" onclick="event.stopPropagation(); logout()" title="ログアウト"><span class="material-icons" style="font-size:20px">logout</span></button>
           </div>
         </div>
-        <div class="profile-name">${escapeHtml(me.display_name || me.username)}</div>
+        <div class="profile-name">${escapeHtml(me.display_name || me.username)}${verifiedBadge(me)}</div>
         <div class="profile-handle">@${escapeHtml(me.username)}</div>
         <div class="profile-bio">${me.bio || '自己紹介はまだありません。'}</div>
         <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
@@ -1179,7 +1185,7 @@ async function renderMyProfile(container, token, user) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${escapeHtml(me.display_name || me.username)}</span>
+            <span class="card-author">${escapeHtml(me.display_name || me.username)}${verifiedBadge(me)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
@@ -1327,6 +1333,15 @@ async function renderWordbookDetail(container, wbId, token, user) {
     const isGuest = !user;
     const words = await fetchAPI(`/wordbooks/${wbId}/words`);
 
+    // 所有者なら保留中の修正提案数を取得
+    let pendingCorrectionCount = 0;
+    if (user && wb.user_id === user.id) {
+      try {
+        const corrCount = await fetchAPI(`/wordbooks/${wbId}/corrections/count`);
+        pendingCorrectionCount = corrCount.count;
+      } catch (e) { }
+    }
+
     // ログイン中のユーザーの間違い単語IDセットを取得
     let mistakeWordIds = new Set();
     if (!isGuest) {
@@ -1348,7 +1363,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
           </div>
           <div>
             <h1 style="font-size:24px;">${escapeHtml(wb.title)}</h1>
-            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: ${escapeHtml(wb.display_name || wb.username)} (@${escapeHtml(wb.username)})</p>
+            <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: ${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)} (@${escapeHtml(wb.username)})</p>
           </div>
         </div>
         ${wb.tags && wb.tags.length > 0 ? `
@@ -1366,6 +1381,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">comment</span>${wb.comment_count || 0} コメント</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">visibility</span>${wb.view_count || 0} 閲覧</span>
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">school</span>${wb.study_count || 0} 学習</span>
+          ${isOwner && pendingCorrectionCount > 0 ? `<span style="color:#8b5cf6; cursor:pointer" onclick="document.getElementById('viewCorrectionsBtn').click()"><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">rate_review</span>${pendingCorrectionCount} 件の修正提案</span>` : ''}
         </div>
         <div style="margin-bottom:16px; margin-left:-12px; display:flex; align-items:center; gap:8px">
           <div class="like-btn" data-wordbook-id="${wb.id}">
@@ -1434,12 +1450,36 @@ async function renderWordbookDetail(container, wbId, token, user) {
       <div style="padding:16px; border-bottom:1px solid var(--border-color)">
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
           <h3 style="margin:0; flex:1">登録された単語</h3>
+          ${!isOwner && !isGuest ? `
+            <button type="button" id="correctionModeBtn" class="btn-primary" style="background:transparent; border:1px solid #8b5cf6; color:#8b5cf6; padding:8px 16px">
+              <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:4px">edit_note</span>修正を提案
+            </button>
+          ` : ''}
+          <button type="button" id="viewCorrectionsBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px">
+            <span class="material-icons" style="vertical-align:middle; font-size:18px; margin-right:4px">rate_review</span>提案された修正<span id="viewCorrectionsBadge" style="margin-left:6px; padding:1px 7px; background:#8b5cf6; color:white; border-radius:10px; font-size:11px; font-weight:bold; display:none"></span>
+          </button>
           <button type="button" id="swapOrderBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px" title="表示順を入れ替え">
             <span class="material-icons" style="vertical-align:middle; font-size:18px">swap_horiz</span>
           </button>
           <button type="button" id="toggleWordsBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 16px">
             <span class="material-icons" style="vertical-align:middle; font-size:18px">expand_more</span>
           </button>
+        </div>
+
+        <div id="correctionSubmitBar" style="display:none; padding:16px; background:rgba(139,92,246,0.1); border-radius:8px; margin-bottom:16px">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
+            <span class="material-icons" style="color:#8b5cf6; font-size:20px">edit_note</span>
+            <span style="font-weight:bold; color:#8b5cf6">修正提案</span>
+            <span id="correctionChangeCount" style="flex:1; color:#8b5cf6; font-size:13px">0 件の変更</span>
+          </div>
+          <input type="text" id="correctionTitle" placeholder="提案名（必須）" maxlength="100"
+            style="width:100%; padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-primary); color:var(--text-primary); font-size:14px; margin-bottom:8px; box-sizing:border-box">
+          <textarea id="correctionDescription" placeholder="説明（任意）" rows="2"
+            style="width:100%; padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-primary); color:var(--text-primary); font-size:14px; resize:vertical; margin-bottom:12px; box-sizing:border-box"></textarea>
+          <div style="display:flex; gap:8px; justify-content:flex-end">
+            <button type="button" id="cancelCorrectionBtn" class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:6px 16px">キャンセル</button>
+            <button type="button" id="submitCorrectionBtn" class="btn-primary" style="background:#8b5cf6; padding:6px 16px" disabled>まとめて提案する</button>
+          </div>
         </div>
 
         <table style="width:100%; border-collapse:collapse; font-size:14px">
@@ -1455,7 +1495,20 @@ async function renderWordbookDetail(container, wbId, token, user) {
           </tbody>
         </table>
       </div>
-      
+
+      <!-- 提案された修正パネル -->
+      <div id="correctionsPanel" style="padding:16px; border-bottom:1px solid var(--border-color); display:none">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
+          <span class="material-icons" style="color:#8b5cf6; font-size:20px">rate_review</span>
+          <h3 style="margin:0; flex:1">提案された修正</h3>
+          <button type="button" id="closeCorrectionsPanelBtn" style="background:none; border:none; cursor:pointer; color:var(--text-secondary); padding:4px">
+            <span class="material-icons" style="font-size:20px">close</span>
+          </button>
+        </div>
+        <div id="correctionItemsList"></div>
+        <div id="correctionDetailView" style="display:none; margin-top:12px"></div>
+      </div>
+
       <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:16px">
         <h3 style="padding:0 16px; margin-bottom:16px;">コメント</h3>
         ${isGuest ? `
@@ -1478,6 +1531,18 @@ async function renderWordbookDetail(container, wbId, token, user) {
     const wordTableBody = document.getElementById('wordTableBody');
     const maxRows = 10;
     let isExpanded = false;
+    let isCorrectionMode = false;
+    const correctionEdits = {}; // { wordId: { word, meaning } }
+
+    function updateCorrectionBar() {
+      const bar = document.getElementById('correctionSubmitBar');
+      const countEl = document.getElementById('correctionChangeCount');
+      const submitBtn = document.getElementById('submitCorrectionBtn');
+      if (!bar) return;
+      const changeCount = Object.keys(correctionEdits).length;
+      countEl.textContent = `${changeCount} 件の変更`;
+      submitBtn.disabled = changeCount === 0;
+    }
 
     function renderWordTable() {
       wordTableBody.innerHTML = '';
@@ -1495,16 +1560,134 @@ async function renderWordbookDetail(container, wbId, token, user) {
                  : ''}
              </td>`
           : '';
-        const col1 = isWordOrderReversed() ? w.meaning : w.word;
-        const col2 = isWordOrderReversed() ? w.word : w.meaning;
-        row.innerHTML = `
-          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col1)}</td>
-          <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col2)}</td>
-          ${statusCell}
-          ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
-        `;
+
+        if (isCorrectionMode) {
+          const edited = correctionEdits[w.id];
+          const wordVal = edited ? edited.word : w.word;
+          const meaningVal = edited ? edited.meaning : w.meaning;
+          const wordChanged = wordVal !== w.word;
+          const meaningChanged = meaningVal !== w.meaning;
+          const col1Field = isWordOrderReversed() ? 'meaning' : 'word';
+          const col2Field = isWordOrderReversed() ? 'word' : 'meaning';
+          const col1Val = isWordOrderReversed() ? meaningVal : wordVal;
+          const col2Val = isWordOrderReversed() ? wordVal : meaningVal;
+          const col1Changed = isWordOrderReversed() ? meaningChanged : wordChanged;
+          const col2Changed = isWordOrderReversed() ? wordChanged : meaningChanged;
+          row.innerHTML = `
+            <td style="padding:8px">
+              <input type="text" data-word-id="${w.id}" data-field="${col1Field}" value="${escapeHtml(col1Val)}"
+                style="width:100%; padding:8px; border:1px solid ${col1Changed ? '#8b5cf6' : 'var(--border-color)'}; border-radius:6px; background:${col1Changed ? 'rgba(139,92,246,0.08)' : 'var(--bg-primary)'}; color:var(--text-primary); font-size:14px"
+                maxlength="${col1Field === 'word' ? 200 : 500}">
+            </td>
+            <td style="padding:8px">
+              <input type="text" data-word-id="${w.id}" data-field="${col2Field}" value="${escapeHtml(col2Val)}"
+                style="width:100%; padding:8px; border:1px solid ${col2Changed ? '#8b5cf6' : 'var(--border-color)'}; border-radius:6px; background:${col2Changed ? 'rgba(139,92,246,0.08)' : 'var(--bg-primary)'}; color:var(--text-primary); font-size:14px"
+                maxlength="${col2Field === 'word' ? 200 : 500}">
+            </td>
+            ${statusCell}
+            ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
+          `;
+          // input変更時のイベント
+          row.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', () => {
+              const wordId = parseInt(input.dataset.wordId);
+              const field = input.dataset.field;
+              const orig = words.find(x => x.id === wordId);
+              if (!orig) return;
+              const current = correctionEdits[wordId] || { word: orig.word, meaning: orig.meaning };
+              current[field] = input.value;
+              // 変更ありかチェック
+              if (current.word === orig.word && current.meaning === orig.meaning) {
+                delete correctionEdits[wordId];
+              } else {
+                correctionEdits[wordId] = current;
+              }
+              // 枠色を更新
+              const changed = input.value !== orig[field];
+              input.style.borderColor = changed ? '#8b5cf6' : 'var(--border-color)';
+              input.style.background = changed ? 'rgba(139,92,246,0.08)' : 'var(--bg-primary)';
+              updateCorrectionBar();
+            });
+          });
+        } else {
+          const col1 = isWordOrderReversed() ? w.meaning : w.word;
+          const col2 = isWordOrderReversed() ? w.word : w.meaning;
+          const corrCount = parseInt(w.pending_correction_count) || 0;
+          const corrBadge = corrCount > 0 ? `<span style="display:inline-flex; align-items:center; gap:2px; margin-left:8px; padding:1px 6px; background:rgba(139,92,246,0.12); color:#8b5cf6; border-radius:10px; font-size:11px; font-weight:bold; white-space:nowrap"><span class="material-icons" style="font-size:13px">edit_note</span>${corrCount}</span>` : '';
+          row.innerHTML = `
+            <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col1)}${!isWordOrderReversed() ? corrBadge : ''}</td>
+            <td style="padding:12px; color:var(--text-primary)">${escapeHtml(col2)}${isWordOrderReversed() ? corrBadge : ''}</td>
+            ${statusCell}
+            ${isOwner ? `<td style="padding:12px; text-align:center"><button class="delete-btn" onclick="deleteWord(${wbId}, ${w.id})"><span class="material-icons" style="font-size:18px">delete</span></button></td>` : ''}
+          `;
+        }
         wordTableBody.appendChild(row);
       });
+    }
+
+    // 修正提案モード切り替え
+    const correctionModeBtn = document.getElementById('correctionModeBtn');
+    const correctionSubmitBar = document.getElementById('correctionSubmitBar');
+    if (correctionModeBtn) {
+      correctionModeBtn.onclick = () => {
+        isCorrectionMode = true;
+        isExpanded = true; // 編集モード時は全単語表示
+        correctionModeBtn.style.display = 'none';
+        if (correctionSubmitBar) correctionSubmitBar.style.display = 'block';
+        const toggleBtn = document.getElementById('toggleWordsBtn');
+        if (toggleBtn) {
+          toggleBtn.style.display = 'none';
+        }
+        renderWordTable();
+        updateCorrectionBar();
+      };
+    }
+    const cancelCorrectionBtn = document.getElementById('cancelCorrectionBtn');
+    if (cancelCorrectionBtn) {
+      cancelCorrectionBtn.onclick = () => {
+        isCorrectionMode = false;
+        isExpanded = false;
+        Object.keys(correctionEdits).forEach(k => delete correctionEdits[k]);
+        if (correctionModeBtn) correctionModeBtn.style.display = '';
+        if (correctionSubmitBar) correctionSubmitBar.style.display = 'none';
+        const toggleBtn = document.getElementById('toggleWordsBtn');
+        if (toggleBtn) toggleBtn.style.display = '';
+        renderWordTable();
+      };
+    }
+    const submitCorrectionBtn = document.getElementById('submitCorrectionBtn');
+    if (submitCorrectionBtn) {
+      submitCorrectionBtn.onclick = async () => {
+        const titleInput = document.getElementById('correctionTitle');
+        const descInput = document.getElementById('correctionDescription');
+        const titleVal = (titleInput ? titleInput.value : '').trim();
+        const descVal = (descInput ? descInput.value : '').trim();
+        if (!titleVal) {
+          alert('提案名を入力してください');
+          if (titleInput) titleInput.focus();
+          return;
+        }
+        const corrections = Object.entries(correctionEdits).map(([wordId, vals]) => ({
+          word_id: parseInt(wordId),
+          suggested_word: vals.word,
+          suggested_meaning: vals.meaning
+        }));
+        if (corrections.length === 0) return;
+        try {
+          submitCorrectionBtn.disabled = true;
+          submitCorrectionBtn.textContent = '送信中...';
+          const result = await fetchAPI(`/wordbooks/${wbId}/corrections/batch`, {
+            method: 'POST',
+            body: JSON.stringify({ title: titleVal, description: descVal || undefined, corrections })
+          });
+          alert(`${result.inserted} 件の修正を提案しました`);
+          router();
+        } catch (err) {
+          alert(err.message);
+          submitCorrectionBtn.disabled = false;
+          submitCorrectionBtn.textContent = 'まとめて提案する';
+        }
+      };
     }
 
     // トグルボタンのイベントリスナー
@@ -1538,6 +1721,145 @@ async function renderWordbookDetail(container, wbId, token, user) {
     // 初期描画
     renderWordTable();
 
+    // 「提案された修正」ボタン・パネルのロジック
+    const viewCorrectionsBtn = document.getElementById('viewCorrectionsBtn');
+    const viewCorrectionsBadge = document.getElementById('viewCorrectionsBadge');
+    const correctionsPanel = document.getElementById('correctionsPanel');
+    const correctionItemsList = document.getElementById('correctionItemsList');
+    const correctionDetailView = document.getElementById('correctionDetailView');
+    const closeCorrectionsPanelBtn = document.getElementById('closeCorrectionsPanelBtn');
+
+    // 保留中の提案数を取得してバッジ表示
+    try {
+      const countRes = await fetchAPI(`/wordbooks/${wbId}/corrections/count`);
+      if (countRes.count > 0 && viewCorrectionsBadge) {
+        viewCorrectionsBadge.style.display = '';
+        viewCorrectionsBadge.textContent = countRes.count;
+      }
+    } catch (e) { /* ignore */ }
+
+    function renderProposalItems(proposals) {
+      correctionItemsList.innerHTML = proposals.length === 0
+        ? '<p style="color:var(--text-secondary); font-size:13px">保留中の修正提案はありません</p>'
+        : proposals.map(p => `
+          <div class="corr-item" data-proposal-id="${p.id}" style="padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s">
+            <div style="display:flex; align-items:center; gap:8px">
+              <div class="avatar" style="width:22px;height:22px;font-size:11px">
+                ${safeAvatarUrl(p.avatar_url) ? `<img src="${safeAvatarUrl(p.avatar_url)}" alt="">` : escapeHtml((p.display_name || p.username).charAt(0).toUpperCase())}
+              </div>
+              <span style="font-weight:bold; font-size:13px">${escapeHtml(p.display_name || p.username)}${verifiedBadge(p)}</span>
+              <span style="color:var(--text-secondary); font-size:11px">${new Date(p.created_at).toLocaleString('ja-JP')}</span>
+            </div>
+            <div style="margin-top:6px; font-size:14px; font-weight:bold; color:var(--text-primary)">${escapeHtml(p.title)}</div>
+            ${p.description ? `<div style="margin-top:2px; font-size:12px; color:var(--text-secondary)">${escapeHtml(p.description)}</div>` : ''}
+            <div style="margin-top:4px; font-size:12px; color:#8b5cf6">${p.correction_count}件の修正</div>
+          </div>
+        `).join('');
+
+      correctionItemsList.querySelectorAll('.corr-item').forEach(item => {
+        item.addEventListener('click', async () => {
+          const pId = parseInt(item.dataset.proposalId);
+          correctionItemsList.querySelectorAll('.corr-item').forEach(el => {
+            el.style.borderColor = 'var(--border-color)';
+            el.style.background = '';
+          });
+          item.style.borderColor = '#8b5cf6';
+          item.style.background = 'rgba(139,92,246,0.04)';
+          await showProposalDetail(pId);
+        });
+      });
+    }
+
+    async function showProposalDetail(proposalId) {
+      correctionDetailView.style.display = '';
+      correctionDetailView.innerHTML = '<p style="color:var(--text-secondary); font-size:13px">読み込み中...</p>';
+      try {
+        const p = await fetchAPI(`/wordbooks/${wbId}/corrections/proposals/${proposalId}`);
+        const corrections = p.corrections || [];
+        correctionDetailView.innerHTML = `
+          <div style="border:1px solid var(--border-color); border-radius:8px; overflow:hidden">
+            <div style="padding:10px 12px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color)">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
+                <div class="avatar" style="width:24px;height:24px;font-size:12px;cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(p.username)}'">
+                  ${safeAvatarUrl(p.avatar_url) ? `<img src="${safeAvatarUrl(p.avatar_url)}" alt="">` : escapeHtml((p.display_name || p.username).charAt(0).toUpperCase())}
+                </div>
+                <span style="font-weight:bold; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(p.username)}'">${escapeHtml(p.display_name || p.username)}${verifiedBadge(p)}</span>
+                <span style="color:var(--text-secondary); font-size:12px">${new Date(p.created_at).toLocaleString('ja-JP')}</span>
+              </div>
+              <div style="font-size:15px; font-weight:bold; color:var(--text-primary)">${escapeHtml(p.title)}</div>
+              ${p.description ? `<div style="font-size:13px; color:var(--text-secondary); margin-top:2px">${escapeHtml(p.description)}</div>` : ''}
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:14px">
+              <thead>
+                <tr style="background:var(--bg-secondary)">
+                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary); width:80px"></th>
+                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">現在</th>
+                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">提案</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${corrections.map(c => {
+                  const wordDiff = c.original_word !== c.suggested_word;
+                  const meaningDiff = c.original_meaning !== c.suggested_meaning;
+                  return `
+                    <tr style="border-top:2px solid var(--border-color)">
+                      <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">単語</td>
+                      <td style="padding:8px 12px">${escapeHtml(c.original_word)}</td>
+                      <td style="padding:8px 12px; ${wordDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_word)}</td>
+                    </tr>
+                    <tr style="border-top:1px solid var(--border-color)">
+                      <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">意味</td>
+                      <td style="padding:8px 12px">${escapeHtml(c.original_meaning)}</td>
+                      <td style="padding:8px 12px; ${meaningDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_meaning)}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+            ${isOwner && p.status === 'pending' ? `
+              <div style="display:flex; gap:8px; justify-content:flex-end; padding:12px; border-top:1px solid var(--border-color)">
+                <button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color); padding:6px 20px" onclick="rejectProposal(${wbId}, ${p.id})">却下</button>
+                <button class="btn-primary" style="padding:6px 20px" onclick="approveProposal(${wbId}, ${p.id})">承認</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      } catch (e) {
+        correctionDetailView.innerHTML = '<p style="color:var(--error-color); font-size:13px">読み込みに失敗しました</p>';
+      }
+    }
+
+    if (viewCorrectionsBtn) {
+      viewCorrectionsBtn.onclick = async () => {
+        if (correctionsPanel.style.display === 'none') {
+          correctionsPanel.style.display = '';
+          correctionDetailView.style.display = 'none';
+          correctionItemsList.innerHTML = '<p style="color:var(--text-secondary); font-size:13px">読み込み中...</p>';
+          try {
+            const proposals = await fetchAPI(`/wordbooks/${wbId}/corrections/proposals?status=pending`);
+            renderProposalItems(proposals);
+            if (proposals.length > 0 && viewCorrectionsBadge) {
+              viewCorrectionsBadge.style.display = '';
+              viewCorrectionsBadge.textContent = proposals.length;
+            } else if (viewCorrectionsBadge) {
+              viewCorrectionsBadge.style.display = 'none';
+            }
+          } catch (e) {
+            correctionItemsList.innerHTML = '<p style="color:var(--error-color); font-size:13px">読み込みに失敗しました</p>';
+          }
+          correctionsPanel.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          correctionsPanel.style.display = 'none';
+        }
+      };
+    }
+
+    if (closeCorrectionsPanelBtn) {
+      closeCorrectionsPanelBtn.onclick = () => {
+        correctionsPanel.style.display = 'none';
+      };
+    }
+
     // コメント一覧の描画
     const comments = await fetchAPI(`/wordbooks/${wbId}/comments`);
     const cl = document.getElementById('commentList');
@@ -1550,7 +1872,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
           </div>
           <div style="flex:1">
             <div style="display:flex; justify-content:space-between; align-items:center">
-              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">${escapeHtml(c.display_name || c.username)}</span>
+              <span style="font-weight:bold; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(c.username)}'">${escapeHtml(c.display_name || c.username)}${verifiedBadge(c)}</span>
               ${isCmdOwner ? `<button class="delete-btn" onclick="deleteComment(${wbId}, ${c.id})"><span class="material-icons" style="font-size:18px">delete</span></button>` : ''}
             </div>
             <p style="margin-top:4px; white-space:pre-wrap">${escapeHtml(c.comment)}</p>
@@ -1646,6 +1968,21 @@ window.deleteComment = async (wbId, cId) => {
   if (!confirm('削除しますか？')) return;
   try {
     await fetchAPI(`/wordbooks/${wbId}/comments/${cId}`, { method: 'DELETE' });
+    router();
+  } catch (err) { alert(err.message); }
+};
+
+// === 修正提案の承認・却下（提案単位） ===
+window.approveProposal = async (wbId, proposalId) => {
+  try {
+    await fetchAPI(`/wordbooks/${wbId}/corrections/proposals/${proposalId}/approve`, { method: 'PUT' });
+    router();
+  } catch (err) { alert(err.message); }
+};
+
+window.rejectProposal = async (wbId, proposalId) => {
+  try {
+    await fetchAPI(`/wordbooks/${wbId}/corrections/proposals/${proposalId}/reject`, { method: 'PUT' });
     router();
   } catch (err) { alert(err.message); }
 };
@@ -1793,7 +2130,7 @@ async function renderHistory(container) {
             ${completionBadge}
           </div>
           <h3 class="card-title">${h.title}</h3>
-          <p class="card-desc" style="font-size:14px">作成者: ${escapeHtml(h.display_name || h.username)} (@${escapeHtml(h.username)})</p>
+          <p class="card-desc" style="font-size:14px">作成者: ${escapeHtml(h.display_name || h.username)}${verifiedBadge(h)} (@${escapeHtml(h.username)})</p>
           ${mistakesBadge}
         `;
         list.appendChild(card);
@@ -1901,17 +2238,18 @@ window.startStudy = (wbId, words, isReview = false, resumeState = null) => {
       // 1周（またはラウンド）が終わったので再開用ステートを一度消す
       localStorage.removeItem(`study_session_${wbId}`);
 
-      if (roundWrongs.length === 0) {
-        // 完全クリアの場合のみ学習完了として記録
-        fetchAPI('/study/finish', {
-          method: 'POST',
-          body: JSON.stringify({
-            wordbookId: wbId,
-            wrongWordIds: [], // 全てクリアしたので空
-            testedWordIds: initialWordIds
-          })
-        }).catch(err => console.error('学習記録の保存に失敗:', err));
+      // ラウンド終了ごとに学習結果をDBに保存（間違いの有無に関わらず）
+      const wrongIds = roundWrongs.map(w => w.id || w.word_id);
+      fetchAPI('/study/finish', {
+        method: 'POST',
+        body: JSON.stringify({
+          wordbookId: wbId,
+          wrongWordIds: wrongIds,
+          testedWordIds: initialWordIds
+        })
+      }).catch(err => console.error('学習記録の保存に失敗:', err));
 
+      if (roundWrongs.length === 0) {
         // 完全クリア
         modal.innerHTML = `
             <div class="study-header">
@@ -2048,7 +2386,7 @@ async function renderUserProfile(container, username, token) {
     container.innerHTML = `
       <div class="header" style="justify-content:flex-start; gap:24px">
         <button onclick="history.back()"><span class="material-icons">arrow_back</span></button>
-        <h2>${escapeHtml(user.display_name || user.username)}</h2>
+        <h2>${escapeHtml(user.display_name || user.username)}${verifiedBadge(user)}</h2>
         <div style="margin-left:auto">${adminMenu}</div>
       </div>
 
@@ -2075,7 +2413,7 @@ async function renderUserProfile(container, username, token) {
             ${isMe ? `<button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>` : ''}
           </div>
         </div>
-        <div class="profile-name">${escapeHtml(user.display_name || user.username)}</div>
+        <div class="profile-name">${escapeHtml(user.display_name || user.username)}${verifiedBadge(user)}</div>
         <div class="profile-handle">@${escapeHtml(user.username)}</div>
         <div class="profile-bio">${escapeHtml(user.bio || '自己紹介はまだありません。')}</div>
         <div class="profile-stats" style="display:flex; gap:16px; margin:12px 0; font-size:14px">
@@ -2104,7 +2442,7 @@ async function renderUserProfile(container, username, token) {
         card.onclick = () => window.location.hash = `#/wordbook/${wb.id}`;
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-author">${escapeHtml(user.display_name || user.username)}</span>
+            <span class="card-author">${escapeHtml(user.display_name || user.username)}${verifiedBadge(user)}</span>
             <span>·</span>
             <span>${d}</span>
           </div>
@@ -2164,6 +2502,63 @@ async function renderNotifications(container) {
           </div>
           <div class="notification-dot" style="background: var(--error-color);"></div>
         `;
+      } else if (n.type === 'announcement') {
+        item.onclick = async () => {
+          if (!n.is_read) {
+            await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+            updateUnreadBadge();
+          }
+          if (n.link) window.location.hash = n.link;
+        };
+        item.innerHTML = `
+          <div class="notification-content">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="material-icons" style="font-size:18px;color:#1d9bf0">campaign</span>
+              <span style="font-size:12px;font-weight:bold;color:#1d9bf0">運営からのお知らせ</span>
+            </div>
+            <div class="notification-message" style="font-weight:600">${escapeHtml(n.message)}</div>
+            <div class="notification-date">${d}</div>
+          </div>
+          ${n.is_read ? '' : '<div class="notification-dot" style="background:#1d9bf0"></div>'}
+        `;
+      } else if (n.type === 'admin_message') {
+        item.onclick = async () => {
+          if (!n.is_read) {
+            await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+            updateUnreadBadge();
+          }
+          if (n.link) window.location.hash = n.link;
+        };
+        item.innerHTML = `
+          <div class="notification-content">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="material-icons" style="font-size:18px;color:#f59e0b">mail</span>
+              <span style="font-size:12px;font-weight:bold;color:#f59e0b">運営からのメッセージ</span>
+            </div>
+            <div class="notification-message" style="font-weight:600">${escapeHtml(n.message)}</div>
+            <div class="notification-date">${d}</div>
+          </div>
+          ${n.is_read ? '' : '<div class="notification-dot" style="background:#f59e0b"></div>'}
+        `;
+      } else if (n.type === 'correction') {
+        item.onclick = async () => {
+          if (!n.is_read) {
+            await fetchAPI(`/notifications/${n.id}/read`, { method: 'PUT' });
+            updateUnreadBadge();
+          }
+          if (n.link) window.location.hash = n.link;
+        };
+        item.innerHTML = `
+          <div class="notification-content">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="material-icons" style="font-size:18px;color:#8b5cf6">edit_note</span>
+              <span style="font-size:12px;font-weight:bold;color:#8b5cf6">修正提案</span>
+            </div>
+            <div class="notification-message">${escapeHtml(n.message)}</div>
+            <div class="notification-date">${d}</div>
+          </div>
+          ${n.is_read ? '' : '<div class="notification-dot" style="background:#8b5cf6"></div>'}
+        `;
       } else {
         item.onclick = async () => {
           if (!n.is_read) {
@@ -2208,6 +2603,7 @@ async function renderAdminDashboard(container, tab = 'stats') {
       <div class="home-tab ${tab === 'stats' ? 'active' : ''}" onclick="window.location.hash='#/admin/stats'">概要</div>
       <div class="home-tab ${tab === 'users' ? 'active' : ''}" onclick="window.location.hash='#/admin/users'">ユーザー一覧</div>
       <div class="home-tab ${tab === 'reports' ? 'active' : ''}" onclick="window.location.hash='#/admin/reports'">通報一覧</div>
+      <div class="home-tab ${tab === 'notifications' ? 'active' : ''}" onclick="window.location.hash='#/admin/notifications'">通知管理</div>
     </div>
     <div id="adminContent" style="padding:16px">
       <div class="loading-spinner">読み込み中</div>
@@ -2223,6 +2619,8 @@ async function renderAdminDashboard(container, tab = 'stats') {
       await renderAdminUsers(content);
     } else if (tab === 'reports') {
       await renderAdminReports(content);
+    } else if (tab === 'notifications') {
+      await renderAdminNotifications(content);
     }
   } catch (err) {
     content.innerHTML = `<div class="error-msg" style="padding:32px">${err.message}</div>`;
@@ -2293,10 +2691,11 @@ async function renderAdminUsers(container) {
       users.forEach(u => {
         const d = new Date(u.created_at).toLocaleDateString('ja-JP');
         const badge = u.is_admin ? '<span class="badge badge-admin">管理者</span>' : (u.is_banned ? '<span class="badge badge-banned">BAN中</span>' : '<span class="badge badge-active">有効</span>');
+        const verifiedLabel = u.is_verified ? '<span class="badge" style="background:#1d9bf0;color:white">認証済み</span>' : '';
         html += `
           <tr>
             <td>
-              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}</div>
+              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}${verifiedBadge(u)}</div>
               <div style="font-size:12px;color:var(--text-secondary)">@${escapeHtml(u.username)}</div>
               <div style="font-size:11px;color:var(--text-secondary)">ID: ${u.id}</div>
             </td>
@@ -2305,12 +2704,14 @@ async function renderAdminUsers(container) {
               <div style="font-size:11px;color:var(--text-secondary)">IP: <a href="javascript:void(0)" onclick="showIpUsers('${escapeHtml(u.registration_ip)}')" style="color:inherit;text-decoration:underline">${escapeHtml(u.registration_ip)}</a><button class="btn-ip-log" onclick="showIpLogs(${u.id}, '${escapeHtml(u.username)}')" title="IP履歴"><span class="material-icons" style="font-size:14px">history</span></button></div>
             </td>
             <td>
-              <div>${badge}</div>
+              <div>${badge} ${verifiedLabel}</div>
               <div style="font-size:11px;color:var(--text-secondary)">警告: <a href="javascript:void(0)" onclick="showWarnings(${u.id}, '${escapeHtml(u.username)}')" style="color:inherit;text-decoration:underline">${u.warning_count}回</a></div>
             </td>
             <td>
               <div style="display:flex;gap:4px">
                 <button class="btn-sm btn-warn" onclick="openWarnModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.display_name || u.username)}')" title="警告送信"><span class="material-icons">warning</span></button>
+                <button class="btn-sm" onclick="openMessageModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.display_name || u.username)}')" title="メッセージ送信" style="color:#f59e0b"><span class="material-icons">mail</span></button>
+                <button class="btn-sm" onclick="toggleVerify(${u.id}, '${escapeHtml(u.username)}', ${!!u.is_verified})" title="${u.is_verified ? '認証取消' : '認証付与'}" style="color:${u.is_verified ? '#1d9bf0' : 'var(--text-secondary)'}"><span class="material-icons">${u.is_verified ? 'verified' : 'new_releases'}</span></button>
                 ${u.is_banned ? `<button class="btn-sm btn-unban" onclick="unbanUser(${u.id}, '${escapeHtml(u.username)}')" title="BAN解除"><span class="material-icons">check_circle</span></button>` : `<button class="btn-sm btn-ban" onclick="openBanModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.display_name || u.username)}')" title="BAN実行"><span class="material-icons">block</span></button>`}
                 <button class="btn-sm btn-delete" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" title="完全削除"><span class="material-icons">delete</span></button>
               </div>
@@ -2369,6 +2770,144 @@ async function renderAdminReports(container) {
     container.innerHTML = `<div class="error-msg">${err.message}</div>`;
   }
 }
+
+async function renderAdminNotifications(container) {
+  container.innerHTML = `
+    <h3 style="margin-bottom:16px">通知管理</h3>
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:20px">
+        <h4 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span class="material-icons" style="color:#1d9bf0">campaign</span> 全体お知らせ送信
+        </h4>
+        <form id="broadcastForm">
+          <label style="color:var(--text-secondary);font-size:14px">メッセージ</label>
+          <textarea id="broadcastMessage" required placeholder="全ユーザーに送信するお知らせ..." style="height:80px;resize:none"></textarea>
+          <label style="color:var(--text-secondary);font-size:14px;margin-top:8px">リンク（任意）</label>
+          <input type="text" id="broadcastLink" placeholder="#/wordbook/1 など">
+          <div id="broadcastError" class="error-msg"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button type="submit" class="btn-primary" style="background:#1d9bf0">全体に送信</button>
+          </div>
+        </form>
+      </div>
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:20px">
+        <h4 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span class="material-icons" style="color:#f59e0b">mail</span> 個別メッセージ送信
+        </h4>
+        <form id="directMessageForm">
+          <label style="color:var(--text-secondary);font-size:14px">ユーザーID</label>
+          <input type="number" id="dmUserId" required placeholder="ユーザーIDを入力">
+          <label style="color:var(--text-secondary);font-size:14px;margin-top:8px">メッセージ</label>
+          <textarea id="dmMessage" required placeholder="ユーザーに送信するメッセージ..." style="height:80px;resize:none"></textarea>
+          <label style="color:var(--text-secondary);font-size:14px;margin-top:8px">リンク（任意）</label>
+          <input type="text" id="dmLink" placeholder="#/wordbook/1 など">
+          <div id="dmError" class="error-msg"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button type="submit" class="btn-primary" style="background:#f59e0b">送信</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('broadcastForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const message = document.getElementById('broadcastMessage').value.trim();
+    const link = document.getElementById('broadcastLink').value.trim();
+    const errEl = document.getElementById('broadcastError');
+    if (!message) { errEl.textContent = 'メッセージを入力してください'; return; }
+    try {
+      const res = await fetchAPI('/admin/notifications/broadcast', {
+        method: 'POST', body: JSON.stringify({ message, link: link || null })
+      });
+      alert(res.message);
+      document.getElementById('broadcastMessage').value = '';
+      document.getElementById('broadcastLink').value = '';
+      errEl.textContent = '';
+    } catch (err) {
+      errEl.textContent = err.message;
+    }
+  };
+
+  document.getElementById('directMessageForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById('dmUserId').value;
+    const message = document.getElementById('dmMessage').value.trim();
+    const link = document.getElementById('dmLink').value.trim();
+    const errEl = document.getElementById('dmError');
+    if (!userId || !message) { errEl.textContent = 'ユーザーIDとメッセージを入力してください'; return; }
+    try {
+      const res = await fetchAPI(`/admin/users/${userId}/message`, {
+        method: 'POST', body: JSON.stringify({ message, link: link || null })
+      });
+      alert(res.message);
+      document.getElementById('dmMessage').value = '';
+      document.getElementById('dmLink').value = '';
+      errEl.textContent = '';
+    } catch (err) {
+      errEl.textContent = err.message;
+    }
+  };
+}
+
+// 認証バッジ付与/取消
+window.toggleVerify = async (userId, username, isVerified) => {
+  const action = isVerified ? 'unverify' : 'verify';
+  const label = isVerified ? '認証バッジを取り消し' : '認証バッジを付与';
+  if (!confirm(`${username} の${label}しますか？`)) return;
+  try {
+    await fetchAPI(`/admin/users/${userId}/${action}`, { method: 'POST' });
+    alert(`${label}しました`);
+    window.location.hash = '#/admin/users';
+    router();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// 個別メッセージ送信モーダル
+window.openMessageModal = (userId, username, displayName) => {
+  displayName = displayName || username;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:400px">
+      <div class="modal-header">
+        <h2 style="font-size:18px">${escapeHtml(displayName)} にメッセージ送信</h2>
+        <button onclick="this.closest('.modal-overlay').remove()"><span class="material-icons">close</span></button>
+      </div>
+      <form id="msgForm" style="padding-top:16px">
+        <label style="color:var(--text-secondary);font-size:14px">メッセージ</label>
+        <textarea id="msgContent" required placeholder="メッセージを入力..." style="height:100px;resize:none"></textarea>
+        <label style="color:var(--text-secondary);font-size:14px;margin-top:8px">リンク（任意）</label>
+        <input type="text" id="msgLink" placeholder="#/wordbook/1 など">
+        <div id="msgError" class="error-msg"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:8px">
+          <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">キャンセル</button>
+          <button type="submit" class="btn-primary" style="background:#f59e0b">送信</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('msgForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const message = document.getElementById('msgContent').value.trim();
+    const link = document.getElementById('msgLink').value.trim();
+    const errEl = document.getElementById('msgError');
+    if (!message) { errEl.textContent = 'メッセージを入力してください'; return; }
+    try {
+      await fetchAPI(`/admin/users/${userId}/message`, {
+        method: 'POST', body: JSON.stringify({ message, link: link || null })
+      });
+      overlay.remove();
+      alert('メッセージを送信しました');
+    } catch (err) {
+      errEl.textContent = err.message;
+    }
+  };
+};
 
 // 警告モーダル
 window.openWarnModal = (userId, username, displayName) => {
@@ -2888,7 +3427,7 @@ async function renderBookmarkedFeed(container, token, user) {
             <div class="avatar" style="width:24px; height:24px; font-size:12px" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">
               ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
             </div>
-            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}</span>
+            <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)}</span>
             ${completionBadge}
           </div>
           <h3 class="card-title">${escapeHtml(wb.title)}</h3>
@@ -3207,7 +3746,7 @@ window.showUserListModal = (title, users) => {
               ${safeAvatarUrl(u.avatar_url) ? `<img src="${safeAvatarUrl(u.avatar_url)}" alt="">` : escapeHtml((u.display_name || u.username).charAt(0).toUpperCase())}
             </div>
             <div style="flex:1">
-              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}</div>
+              <div style="font-weight:bold">${escapeHtml(u.display_name || u.username)}${verifiedBadge(u)}</div>
               <div style="font-size:12px; color:var(--text-secondary)">@${escapeHtml(u.username)}</div>
               <div style="font-size:13px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${escapeHtml(u.bio || '')}</div>
             </div>

@@ -37,7 +37,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
     const result = await db.query(`
       SELECT 
         u.id, u.username, u.display_name, u.created_at, u.registration_ip,
-        u.is_admin, u.is_banned, u.ban_reason,
+        u.is_admin, u.is_banned, u.ban_reason, u.is_verified,
         COUNT(w.id) AS warning_count
       FROM users u
       LEFT JOIN user_warnings w ON w.user_id = u.id
@@ -266,6 +266,115 @@ router.get('/reports', authenticate, requireAdmin, async (req, res) => {
       ORDER BY r.created_at DESC
     `);
     res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/admin/notifications/broadcast
+ * 全ユーザーに一斉通知（type: announcement）
+ */
+router.post('/notifications/broadcast', authenticate, requireAdmin, async (req, res) => {
+  const { message, link } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'メッセージは必須です' });
+  }
+  if (message.length > 500) {
+    return res.status(400).json({ error: 'メッセージは500文字以内にしてください' });
+  }
+
+  try {
+    const users = await db.query('SELECT id FROM users WHERE is_banned = false');
+    for (const user of users.rows) {
+      await db.query(
+        'INSERT INTO notifications (user_id, type, message, link) VALUES ($1, $2, $3, $4)',
+        [user.id, 'announcement', message.trim(), link || null]
+      );
+    }
+    res.json({ message: `${users.rows.length}人のユーザーに通知を送信しました` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/message
+ * 特定ユーザーに個別通知（type: admin_message）
+ */
+router.post('/users/:id/message', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { message, link } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'メッセージは必須です' });
+  }
+  if (message.length > 500) {
+    return res.status(400).json({ error: 'メッセージは500文字以内にしてください' });
+  }
+
+  try {
+    const userCheck = await db.query('SELECT id FROM users WHERE id = $1', [id]);
+    if (!userCheck.rows[0]) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+
+    await db.query(
+      'INSERT INTO notifications (user_id, type, message, link) VALUES ($1, $2, $3, $4)',
+      [id, 'admin_message', message.trim(), link || null]
+    );
+    res.json({ message: 'メッセージを送信しました' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/verify
+ * ユーザーに認証バッジを付与
+ */
+router.post('/users/:id/verify', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const userCheck = await db.query('SELECT id, is_verified FROM users WHERE id = $1', [id]);
+    if (!userCheck.rows[0]) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    if (userCheck.rows[0].is_verified) {
+      return res.status(400).json({ error: 'このユーザーは既に認証済みです' });
+    }
+
+    await db.query('UPDATE users SET is_verified = true WHERE id = $1', [id]);
+    res.json({ message: '認証バッジを付与しました' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/unverify
+ * ユーザーの認証バッジを取消
+ */
+router.post('/users/:id/unverify', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const userCheck = await db.query('SELECT id, is_verified FROM users WHERE id = $1', [id]);
+    if (!userCheck.rows[0]) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    if (!userCheck.rows[0].is_verified) {
+      return res.status(400).json({ error: 'このユーザーは認証されていません' });
+    }
+
+    await db.query('UPDATE users SET is_verified = false WHERE id = $1', [id]);
+    res.json({ message: '認証バッジを取り消しました' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
