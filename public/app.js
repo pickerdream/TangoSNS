@@ -1,14 +1,11 @@
 const API_BASE = '/api';
 
-// XSS対策: HTMLエスケープ
+// XSS対策: HTMLエスケープ（1パスで全文字を置換）
+const _ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+const _ESC_RE = /[&<>"']/g;
 function escapeHtml(s) {
   if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(s).replace(_ESC_RE, ch => _ESC_MAP[ch]);
 }
 
 // XSS対策: avatar_url の javascript: プロトコル排除
@@ -356,14 +353,14 @@ function createLayout(user) {
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
           <h3 style="margin-bottom: 12px">急上昇</h3>
           <div id="trendingWordsList" class="trending-words">
-            <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+            <span class="loading-spinner-sm">読み込み中</span>
           </div>
         </div>
 
         <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
           <h3 style="margin-bottom: 12px">人気のタグ</h3>
           <div id="popularTagsList" class="popular-tags">
-            <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+            <span class="loading-spinner-sm">読み込み中</span>
           </div>
         </div>
 
@@ -442,14 +439,14 @@ function createLayout(user) {
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
         <h3 style="margin-bottom: 12px">急上昇</h3>
         <div id="trendingWordsList" class="trending-words">
-          <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+          <span class="loading-spinner-sm">読み込み中</span>
         </div>
       </div>
 
       <div style="background: var(--bg-secondary); padding: 16px; border-radius: 16px; margin-top: 16px;">
         <h3 style="margin-bottom: 12px">人気のタグ</h3>
         <div id="popularTagsList" class="popular-tags">
-          <span style="color: var(--text-secondary); font-size: 14px;">読み込み中...</span>
+          <span class="loading-spinner-sm">読み込み中</span>
         </div>
       </div>
 
@@ -1129,7 +1126,7 @@ async function handleGoogleLinkCredential(response) {
 
 // === マイプロフィール (閲覧用) ===
 async function renderMyProfile(container, token, user) {
-  container.innerHTML = `<div style="padding:32px;text-align:center">読み込み中...</div>`;
+  container.innerHTML = `<div class="loading-spinner">読み込み中</div>`;
   try {
     // 最新のユーザー情報を取得 (bioやavatar_urlが反映されているか確認するため)
     const me = await fetchAPI('/users/me');
@@ -1148,7 +1145,10 @@ async function renderMyProfile(container, token, user) {
           <div class="avatar">
             ${me.avatar_url ? `<img src="${me.avatar_url}" alt="">` : escapeHtml((me.display_name || me.username).charAt(0).toUpperCase())}
           </div>
-          <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>
+          <div style="display:flex; gap:8px">
+            <button class="btn-primary" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary)" onclick="openEditProfileModal()">プロフィールを編集</button>
+            <button class="btn-primary mobile-logout-btn" style="background:transparent; border:1px solid var(--border-color); color:var(--error-color)" onclick="event.stopPropagation(); logout()" title="ログアウト"><span class="material-icons" style="font-size:20px">logout</span></button>
+          </div>
         </div>
         <div class="profile-name">${escapeHtml(me.display_name || me.username)}</div>
         <div class="profile-handle">@${escapeHtml(me.username)}</div>
@@ -1319,7 +1319,7 @@ window.submitWordbook = async (btn) => {
 
 // === 単語帳詳細 (単語とコメント) ===
 async function renderWordbookDetail(container, wbId, token, user) {
-  container.innerHTML = `<div style="padding:32px;text-align:center">読み込み中...</div>`;
+  container.innerHTML = `<div class="loading-spinner">読み込み中</div>`;
 
   try {
     const wb = await fetchAPI(`/wordbooks/${wbId}`);
@@ -1746,7 +1746,7 @@ async function renderHistory(container) {
   const renderList = async () => {
     const list = document.getElementById('historyList');
     if (!list) return;
-    list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>`;
+    list.innerHTML = `<div class="loading-spinner">読み込み中</div>`;
 
     try {
       const params = new URLSearchParams();
@@ -2011,7 +2011,7 @@ window.startStudy = (wbId, words, isReview = false, resumeState = null) => {
 
 // === 他ユーザーのプロフィール画面 ===
 async function renderUserProfile(container, username, token) {
-  container.innerHTML = `<div style="padding:32px;text-align:center">読み込み中...</div>`;
+  container.innerHTML = `<div class="loading-spinner">読み込み中</div>`;
   try {
     const data = await fetchAPI(`/users/${username}`);
     const { user, wordbooks } = data;
@@ -2129,7 +2129,7 @@ async function renderNotifications(container) {
         <button class="btn-secondary" onclick="markAllNotificationsAsRead()">すべて既読にする</button>
       </div>
       <div id="notificationsList" class="notifications-list">
-        <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
+        <div class="loading-spinner">読み込み中</div>
       </div>
     `;
 
@@ -2210,7 +2210,7 @@ async function renderAdminDashboard(container, tab = 'stats') {
       <div class="home-tab ${tab === 'reports' ? 'active' : ''}" onclick="window.location.hash='#/admin/reports'">通報一覧</div>
     </div>
     <div id="adminContent" style="padding:16px">
-      <div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>
+      <div class="loading-spinner">読み込み中</div>
     </div>
   `;
 
@@ -2847,7 +2847,7 @@ async function renderBookmarkedFeed(container, token, user) {
   const renderFeed = async () => {
     const feedList = document.getElementById('feedList');
     if (!feedList) return;
-    feedList.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">読み込み中...</div>`;
+    feedList.innerHTML = `<div class="loading-spinner">読み込み中</div>`;
 
     try {
       const params = new URLSearchParams();
