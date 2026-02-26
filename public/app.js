@@ -23,6 +23,12 @@ function verifiedBadge(user) {
   return '<span class="verified-badge" title="認証済み"><span class="material-icons" style="font-size:16px;color:#1d9bf0">verified</span></span>';
 }
 
+// 単語帳保証バッジヘルパー
+function wbVerifiedMark(wb) {
+  if (!wb || !(parseInt(wb.verification_count) > 0)) return '';
+  return '<span title="認証済みユーザーが保証" style="margin-left:4px"><span class="material-icons" style="font-size:18px;color:#1d9bf0;vertical-align:middle">verified</span></span>';
+}
+
 // ホームタブ切り替え関数
 window.switchHomeTab = (tab) => {
   const newHash = tab === 'latest' ? '#/' : '#/?following_only=true';
@@ -535,7 +541,7 @@ async function loadTrendingWordbooks() {
 
     container.innerHTML = wordbooks.map(wb =>
       `<div class="trending-word" onclick="window.location.hash='#/wordbook/${wb.id}'" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
-        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(wb.title)}</div>
+        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(wb.title)}${wbVerifiedMark(wb)}</div>
         <div style="color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(wb.description || '説明はありません')}</div>
         <div style="color: var(--text-secondary); font-size: 11px;">学習 ${wb.study_count}回 · 閲覧 ${wb.view_count}回 · ${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)}</div>
       </div>`
@@ -848,7 +854,7 @@ async function renderHomeFeed(container, token, user, initialUrlParams = null) {
           <span>${d}</span>
           ${completionBadge}
         </div>
-        <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+        <h3 class="card-title">${escapeHtml(wb.title)}${wbVerifiedMark(wb)}</h3>
         ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         ${tagsHtml}
         <div class="card-stats">
@@ -1189,7 +1195,7 @@ async function renderMyProfile(container, token, user) {
             <span>·</span>
             <span>${d}</span>
           </div>
-          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          <h3 class="card-title">${escapeHtml(wb.title)}${wbVerifiedMark(wb)}</h3>
           ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         `;
         list.appendChild(card);
@@ -1362,7 +1368,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
             ${safeAvatarUrl(wb.avatar_url) ? `<img src="${safeAvatarUrl(wb.avatar_url)}" alt="">` : escapeHtml((wb.display_name || wb.username).charAt(0).toUpperCase())}
           </div>
           <div>
-            <h1 style="font-size:24px;">${escapeHtml(wb.title)}</h1>
+            <h1 style="font-size:24px;">${escapeHtml(wb.title)}<span id="wbVerifMark"></span></h1>
             <p style="color:var(--text-secondary); cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(wb.username)}'">作成者: ${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)} (@${escapeHtml(wb.username)})</p>
           </div>
         </div>
@@ -1383,6 +1389,7 @@ async function renderWordbookDetail(container, wbId, token, user) {
           <span><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">school</span>${wb.study_count || 0} 学習</span>
           ${isOwner && pendingCorrectionCount > 0 ? `<span style="color:#8b5cf6; cursor:pointer" onclick="document.getElementById('viewCorrectionsBtn').click()"><span class="material-icons" style="vertical-align:middle;font-size:16px;margin-right:4px">rate_review</span>${pendingCorrectionCount} 件の修正提案</span>` : ''}
         </div>
+        <div id="verificationSection" style="margin-bottom:16px"></div>
         <div style="margin-bottom:16px; margin-left:-12px; display:flex; align-items:center; gap:8px">
           <div class="like-btn" data-wordbook-id="${wb.id}">
             <span class="material-icons" style="font-size:18px">favorite_border</span>
@@ -1506,7 +1513,6 @@ async function renderWordbookDetail(container, wbId, token, user) {
           </button>
         </div>
         <div id="correctionItemsList"></div>
-        <div id="correctionDetailView" style="display:none; margin-top:12px"></div>
       </div>
 
       <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:16px">
@@ -1526,6 +1532,72 @@ async function renderWordbookDetail(container, wbId, token, user) {
       </div>
     `;
     container.innerHTML = html;
+
+    // 保証セクションの描画
+    const verifSection = document.getElementById('verificationSection');
+    try {
+      const verifData = await fetchAPI(`/wordbooks/${wbId}/verifications`);
+      // タイトル横のチェックマーク
+      const verifMarkEl = document.getElementById('wbVerifMark');
+      if (verifMarkEl && verifData.verification_count > 0) {
+        verifMarkEl.innerHTML = '<span title="認証済みユーザーが保証" style="margin-left:6px"><span class="material-icons" style="font-size:22px;color:#1d9bf0;vertical-align:middle">verified</span></span>';
+      }
+      if (verifData.verification_count > 0 || (user && user.is_verified)) {
+        const verifiers = verifData.verifiers || [];
+        const showVerifyBtn = !verifData.verified_by_current_user && user && user.is_verified && !isOwner;
+        const showUnverifyBtn = verifData.verified_by_current_user;
+        verifSection.innerHTML = `
+          <div style="padding:12px 16px; background:rgba(29,155,240,0.06); border:1px solid rgba(29,155,240,0.2); border-radius:10px">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:${verifiers.length > 0 ? '10px' : '0'}">
+              <span class="material-icons" style="color:#1d9bf0; font-size:20px">verified</span>
+              <span style="font-weight:bold; color:#1d9bf0; font-size:14px">${verifiers.length > 0 ? `${verifiers.length}人の認証ユーザーが保証` : 'この単語帳を保証する'}</span>
+              ${showVerifyBtn ? `
+                <button id="verifyWordbookBtn" class="btn-primary" style="margin-left:auto; padding:4px 14px; font-size:12px; background:#1d9bf0">
+                  <span class="material-icons" style="font-size:14px; vertical-align:middle; margin-right:4px">verified</span>保証する
+                </button>
+              ` : ''}
+              ${showUnverifyBtn ? `
+                <button id="unverifyWordbookBtn" class="btn-primary" style="margin-left:auto; padding:4px 14px; font-size:12px; background:transparent; border:1px solid rgba(29,155,240,0.3); color:#1d9bf0">
+                  保証済み
+                </button>
+              ` : ''}
+            </div>
+            ${verifiers.length > 0 ? `
+              <div style="display:flex; flex-wrap:wrap; gap:8px">
+                ${verifiers.map(v => `
+                  <div style="display:flex; align-items:center; gap:5px; padding:4px 10px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:20px; cursor:pointer; font-size:13px" onclick="window.location.hash='#/user/${escapeHtml(v.username)}'">
+                    <div class="avatar" style="width:18px;height:18px;font-size:9px">
+                      ${safeAvatarUrl(v.avatar_url) ? `<img src="${safeAvatarUrl(v.avatar_url)}" alt="">` : escapeHtml((v.display_name || v.username).charAt(0).toUpperCase())}
+                    </div>
+                    <span>${escapeHtml(v.display_name || v.username)}</span>
+                    ${verifiedBadge(v)}
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `;
+
+        const verifyBtn = document.getElementById('verifyWordbookBtn');
+        if (verifyBtn) {
+          verifyBtn.onclick = async () => {
+            try {
+              await fetchAPI(`/wordbooks/${wbId}/verifications`, { method: 'POST' });
+              router();
+            } catch (err) { alert(err.message); }
+          };
+        }
+        const unverifyBtn = document.getElementById('unverifyWordbookBtn');
+        if (unverifyBtn) {
+          unverifyBtn.onclick = async () => {
+            try {
+              await fetchAPI(`/wordbooks/${wbId}/verifications`, { method: 'DELETE' });
+              router();
+            } catch (err) { alert(err.message); }
+          };
+        }
+      }
+    } catch (e) { /* ignore */ }
 
     // 単語一覧の描画（表形式）
     const wordTableBody = document.getElementById('wordTableBody');
@@ -1721,12 +1793,11 @@ async function renderWordbookDetail(container, wbId, token, user) {
     // 初期描画
     renderWordTable();
 
-    // 「提案された修正」ボタン・パネルのロジック
+    // 「提案された修正」パネルのロジック
     const viewCorrectionsBtn = document.getElementById('viewCorrectionsBtn');
     const viewCorrectionsBadge = document.getElementById('viewCorrectionsBadge');
     const correctionsPanel = document.getElementById('correctionsPanel');
     const correctionItemsList = document.getElementById('correctionItemsList');
-    const correctionDetailView = document.getElementById('correctionDetailView');
     const closeCorrectionsPanelBtn = document.getElementById('closeCorrectionsPanelBtn');
 
     // 保留中の提案数を取得してバッジ表示
@@ -1753,87 +1824,81 @@ async function renderWordbookDetail(container, wbId, token, user) {
             <div style="margin-top:6px; font-size:14px; font-weight:bold; color:var(--text-primary)">${escapeHtml(p.title)}</div>
             ${p.description ? `<div style="margin-top:2px; font-size:12px; color:var(--text-secondary)">${escapeHtml(p.description)}</div>` : ''}
             <div style="margin-top:4px; font-size:12px; color:#8b5cf6">${p.correction_count}件の修正</div>
+            <div class="corr-detail-slot"></div>
           </div>
         `).join('');
 
       correctionItemsList.querySelectorAll('.corr-item').forEach(item => {
         item.addEventListener('click', async () => {
           const pId = parseInt(item.dataset.proposalId);
+          const slot = item.querySelector('.corr-detail-slot');
+          // 既に開いている場合は閉じる
+          if (slot.children.length > 0) {
+            slot.innerHTML = '';
+            item.style.borderColor = 'var(--border-color)';
+            item.style.background = '';
+            return;
+          }
+          // 他のアイテムの詳細を閉じる
           correctionItemsList.querySelectorAll('.corr-item').forEach(el => {
+            el.querySelector('.corr-detail-slot').innerHTML = '';
             el.style.borderColor = 'var(--border-color)';
             el.style.background = '';
           });
           item.style.borderColor = '#8b5cf6';
           item.style.background = 'rgba(139,92,246,0.04)';
-          await showProposalDetail(pId);
+          slot.innerHTML = '<p style="color:var(--text-secondary); font-size:13px; margin-top:8px">読み込み中...</p>';
+          try {
+            const p = await fetchAPI(`/wordbooks/${wbId}/corrections/proposals/${pId}`);
+            const corrections = p.corrections || [];
+            slot.innerHTML = `
+              <div style="border:1px solid var(--border-color); border-radius:8px; overflow:hidden; margin-top:10px">
+                <table style="width:100%; border-collapse:collapse; font-size:14px">
+                  <thead>
+                    <tr style="background:var(--bg-secondary)">
+                      <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary); width:80px"></th>
+                      <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">現在</th>
+                      <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">提案</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${corrections.map(c => {
+                      const wordDiff = c.original_word !== c.suggested_word;
+                      const meaningDiff = c.original_meaning !== c.suggested_meaning;
+                      return `
+                        <tr style="border-top:2px solid var(--border-color)">
+                          <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">単語</td>
+                          <td style="padding:8px 12px">${escapeHtml(c.original_word)}</td>
+                          <td style="padding:8px 12px; ${wordDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_word)}</td>
+                        </tr>
+                        <tr style="border-top:1px solid var(--border-color)">
+                          <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">意味</td>
+                          <td style="padding:8px 12px">${escapeHtml(c.original_meaning)}</td>
+                          <td style="padding:8px 12px; ${meaningDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_meaning)}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+                ${isOwner && p.status === 'pending' ? `
+                  <div style="display:flex; gap:8px; justify-content:flex-end; padding:12px; border-top:1px solid var(--border-color)">
+                    <button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color); padding:6px 20px" onclick="rejectProposal(${wbId}, ${p.id})">却下</button>
+                    <button class="btn-primary" style="padding:6px 20px" onclick="approveProposal(${wbId}, ${p.id})">承認</button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          } catch (e) {
+            slot.innerHTML = '<p style="color:var(--error-color); font-size:13px; margin-top:8px">読み込みに失敗しました</p>';
+          }
         });
       });
-    }
-
-    async function showProposalDetail(proposalId) {
-      correctionDetailView.style.display = '';
-      correctionDetailView.innerHTML = '<p style="color:var(--text-secondary); font-size:13px">読み込み中...</p>';
-      try {
-        const p = await fetchAPI(`/wordbooks/${wbId}/corrections/proposals/${proposalId}`);
-        const corrections = p.corrections || [];
-        correctionDetailView.innerHTML = `
-          <div style="border:1px solid var(--border-color); border-radius:8px; overflow:hidden">
-            <div style="padding:10px 12px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color)">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
-                <div class="avatar" style="width:24px;height:24px;font-size:12px;cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(p.username)}'">
-                  ${safeAvatarUrl(p.avatar_url) ? `<img src="${safeAvatarUrl(p.avatar_url)}" alt="">` : escapeHtml((p.display_name || p.username).charAt(0).toUpperCase())}
-                </div>
-                <span style="font-weight:bold; font-size:14px; cursor:pointer" onclick="window.location.hash='#/user/${escapeHtml(p.username)}'">${escapeHtml(p.display_name || p.username)}${verifiedBadge(p)}</span>
-                <span style="color:var(--text-secondary); font-size:12px">${new Date(p.created_at).toLocaleString('ja-JP')}</span>
-              </div>
-              <div style="font-size:15px; font-weight:bold; color:var(--text-primary)">${escapeHtml(p.title)}</div>
-              ${p.description ? `<div style="font-size:13px; color:var(--text-secondary); margin-top:2px">${escapeHtml(p.description)}</div>` : ''}
-            </div>
-            <table style="width:100%; border-collapse:collapse; font-size:14px">
-              <thead>
-                <tr style="background:var(--bg-secondary)">
-                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary); width:80px"></th>
-                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">現在</th>
-                  <th style="padding:8px 12px; text-align:left; font-weight:bold; color:var(--text-secondary)">提案</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${corrections.map(c => {
-                  const wordDiff = c.original_word !== c.suggested_word;
-                  const meaningDiff = c.original_meaning !== c.suggested_meaning;
-                  return `
-                    <tr style="border-top:2px solid var(--border-color)">
-                      <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">単語</td>
-                      <td style="padding:8px 12px">${escapeHtml(c.original_word)}</td>
-                      <td style="padding:8px 12px; ${wordDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_word)}</td>
-                    </tr>
-                    <tr style="border-top:1px solid var(--border-color)">
-                      <td style="padding:8px 12px; font-weight:bold; color:var(--text-secondary); font-size:13px">意味</td>
-                      <td style="padding:8px 12px">${escapeHtml(c.original_meaning)}</td>
-                      <td style="padding:8px 12px; ${meaningDiff ? 'background:rgba(250,204,21,0.2); font-weight:bold' : ''}">${escapeHtml(c.suggested_meaning)}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-            ${isOwner && p.status === 'pending' ? `
-              <div style="display:flex; gap:8px; justify-content:flex-end; padding:12px; border-top:1px solid var(--border-color)">
-                <button class="btn-primary" style="background:transparent; border:1px solid var(--error-color); color:var(--error-color); padding:6px 20px" onclick="rejectProposal(${wbId}, ${p.id})">却下</button>
-                <button class="btn-primary" style="padding:6px 20px" onclick="approveProposal(${wbId}, ${p.id})">承認</button>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      } catch (e) {
-        correctionDetailView.innerHTML = '<p style="color:var(--error-color); font-size:13px">読み込みに失敗しました</p>';
-      }
     }
 
     if (viewCorrectionsBtn) {
       viewCorrectionsBtn.onclick = async () => {
         if (correctionsPanel.style.display === 'none') {
           correctionsPanel.style.display = '';
-          correctionDetailView.style.display = 'none';
           correctionItemsList.innerHTML = '<p style="color:var(--text-secondary); font-size:13px">読み込み中...</p>';
           try {
             const proposals = await fetchAPI(`/wordbooks/${wbId}/corrections/proposals?status=pending`);
@@ -1986,6 +2051,8 @@ window.rejectProposal = async (wbId, proposalId) => {
     router();
   } catch (err) { alert(err.message); }
 };
+
+
 
 // === 単語帳編集モーダル ===
 window.openEditWordbookModal = async (wb) => {
@@ -2446,7 +2513,7 @@ async function renderUserProfile(container, username, token) {
             <span>·</span>
             <span>${d}</span>
           </div>
-          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          <h3 class="card-title">${escapeHtml(wb.title)}${wbVerifiedMark(wb)}</h3>
           ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
         `;
         list.appendChild(card);
@@ -3430,7 +3497,7 @@ async function renderBookmarkedFeed(container, token, user) {
             <span class="card-author" onclick="event.stopPropagation(); window.location.hash='#/user/${escapeHtml(wb.username)}'">${escapeHtml(wb.display_name || wb.username)}${verifiedBadge(wb)}</span>
             ${completionBadge}
           </div>
-          <h3 class="card-title">${escapeHtml(wb.title)}</h3>
+          <h3 class="card-title">${escapeHtml(wb.title)}${wbVerifiedMark(wb)}</h3>
           ${wb.description ? `<p class="card-desc">${escapeHtml(wb.description)}</p>` : ''}
           ${tagsHtml}
           <div class="card-stats">

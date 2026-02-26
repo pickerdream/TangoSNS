@@ -29,6 +29,7 @@ router.get('/', async (req, res) => {
       SELECT w.id, w.title, w.description, w.created_at, w.view_count,
              u.id AS user_id, u.username, u.display_name, u.avatar_url, u.is_verified,
              EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed,
+             (SELECT COUNT(*) FROM wordbook_verifications wv WHERE wv.wordbook_id = w.id) AS verification_count,
              COALESCE(
                (SELECT json_agg(json_build_object('id', t.id, 'name', t.name))
                 FROM wordbook_tags wt
@@ -155,7 +156,8 @@ router.get('/bookmarked', authenticate, async (req, res) => {
             SELECT w.*, u.username, u.display_name, u.avatar_url, u.is_verified,
                    (SELECT COUNT(*) FROM wordbook_likes WHERE wordbook_id = w.id) AS like_count,
                    (SELECT COUNT(*) FROM words WHERE wordbook_id = w.id) AS word_count,
-                   EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed
+                   EXISTS(SELECT 1 FROM wordbook_completions c WHERE c.wordbook_id = w.id AND c.user_id = $1) AS is_completed,
+                   (SELECT COUNT(*) FROM wordbook_verifications wv WHERE wv.wordbook_id = w.id) AS verification_count
             FROM wordbooks w
             JOIN users u ON u.id = w.user_id
             JOIN wordbook_bookmarks b ON b.wordbook_id = w.id

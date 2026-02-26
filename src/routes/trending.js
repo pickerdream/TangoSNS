@@ -35,7 +35,8 @@ router.get('/wordbooks', async (req, res) => {
         const result = await db.query(
             `SELECT wb.id, wb.title, wb.description, wb.view_count, wb.created_at,
                     u.username, u.display_name, u.avatar_url, u.is_verified,
-                    COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = wb.id), 0) AS study_count
+                    COALESCE((SELECT COUNT(*) FROM study_history sh WHERE sh.wordbook_id = wb.id), 0) AS study_count,
+                    (SELECT COUNT(*) FROM wordbook_verifications wv WHERE wv.wordbook_id = wb.id) AS verification_count
              FROM wordbooks wb
              JOIN users u ON wb.user_id = u.id
              ORDER BY study_count DESC, wb.view_count DESC
